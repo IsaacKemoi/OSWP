@@ -1,2 +1,2 @@
-# OSWP
-Offensive Security Wireless Professional (OSWP)
+# Offensive Security Wireless Professional (OSWP) Course
+
