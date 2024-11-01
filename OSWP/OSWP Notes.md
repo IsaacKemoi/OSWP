@@ -362,3 +362,53 @@ A step by step outline of the process:
 
 ### Wired Equivalent Privacy (WEP)
 
+WEP aims to provide some degree of privacy to data exchanged on wireless networks. It is part of IEEE 802.11 standard and it is a scheme used to secure wireless network using Rivest Cipher 4 (RC4) to encrypt traffic and perform CRC32 checksum for message integrity. 
+
+WEP encryption only uses a 24-bit initialization vector (IV) as when WEP standard was being drafted, the key size was limited due to US government export restrictions on cryptographic technologies. 
+
+A 64-bit key was permitted, of which, 24 bits are used for the IVs, thus reducing the real key size to 40bits. Once the export restrictions were lifted, 128-bit WEP (using the same 24bit-IV) was implemented. 
+
+
+#### RC4 Encryption
+
+RC4 was designed by Ron Rivest from RSA security and was chosen for wireless encryption due to its simplicity and impressive speed. 
+
+RC4 is a symmetric cipher, meaning that the same key is used to encrypt and decrypt data. It creates a stream of bits that are XOR'd with plain text to get the encrypted data. To decrypt it, we can simply XOR the encrypted text with the key stream in order to recover the plaintext. 
+
+RC4 consists of two key elements:
+
+* *Key Scheduling Algorithm* (KSA)  - Initializes the stable table with the IV and the WEP key
+* *Pseudo-Random Generation Algorithm (PRGA)* - Creates the Key stresm
+
+
+![[Pasted image 20241101153223.png]]
+
+The figure below outlines the WEP encryption process:
+
+![[Pasted image 20241101153243.png]]
+
+An outline of the steps involved in WEP encryption is:
+
+1. Concatenates the IV and the WEP key, then run KSA and PRGA to get the keystream
+2. Create the integrity check value (ICV) of the message, then concatenate it to the message
+3. XOR the plain text message plus the CRC32 and the keystream to obtain the encrypted text. 
+4. The packet then contains the following elements :
+
+* IV (used previously)
+* Key ID
+* Encrypted text
+* ICV that is the CRC32 of the plain text
+
+The WEP decryption process flows according to the diagram below:
+
+![[Pasted image 20241101154116.png]]
+
+
+The steps that take place during the decryption process are as follows:
+
+1. Concatenates the IV and the key corresponding to the key ID, then runs the KSA and PRGA to obtain the keystream
+2. XOR the encrypted message and the key stream, resulting in the message + ICV
+3. Compared the decrypted ICV with the one received with the packet. If they are the same, the frame is intact and accepted, otherwise discard them as the packet is fake or corrupted. 
+
+#### WEP Authentication
+
