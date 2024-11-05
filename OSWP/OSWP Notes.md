@@ -412,3 +412,251 @@ The steps that take place during the decryption process are as follows:
 
 #### WEP Authentication
 
+We can make use of two authentication systems. *Open* and *Shared* authentication. Open authentication is trivial and commonly used. Shared authentication, on the other hand is fairly uncommon and clients will often struggle trying open authentication before switching to shared authentication. 
+
+**Open Authentication**
+In open authentication, a client does not provide any credentials when authenticating to the Access Point. However, once associated, it must possess the correct key to encrypt and decrypt data frames.
+
+**Shared Authentication**
+During authentication, a challenge text is sent to the client. The challenge text must be encrypted with the WEP key by the client and sent back to the AP for verification, which allows the client to prove knowledge of the key. Once the encrypted challenge text is received, the AP attempts to decrypt it. If it is successful and matches the clear text version of the challenge text, the client is allowed to proceed to associate to the access point.
+
+
+### Wi-Fi Protected Access
+
+The IEEE 802.11i, aimed at improving wireless security, proceeded to develop two new link layer encryption protocols. Temporal Key Integrity Protocol (TKIP) and Counter Mode with CBC-MAC (CCMP). 
+
+CCMP was designed from the ground up and took much time to complete in comparison to TKIP. TKIP ended up with the commercial name WPA1 and WPA2 was given to CCMP. 
+
+WPA encryption comes in 2 flavours:
+
+* **WPA Personal** - Makes use of pre-shared key authentication (WPA-PSK), a passphrase shared by all peers of the network. 
+* **WPA Enterprise** - Uses 802.1X and a RADIUS server for Authentication , Authorization and Accounting. 
+
+The below image illustrates the setup to create WPA secure communication channel;
+
+![[Pasted image 20241101160910.png]]
+
+
+### WPA Ciphers
+
+TKIP support legacy hardware that could only handle WEP, and CCMP is based on Advanced Encryption System (AES). 
+
+**TKIP**
+TKIP is based on the 3rd draft of 802.11i committee. It was designed to be compatible with legacy hardware and  still use WEP as the encryption algorithm although it addresses the flaws found in WEP with the following elements. 
+
+* Per packet key mixing
+* IV sequencing to avoid replay attacks
+* New Message Integrity Check (MIC), using the Michael algorithm and countermeasures such as MIC failures
+* Key distribution and rekeying mechanism
+
+**CCMP**
+CCMP is the implementation of the final version of 802.11i and is also called Robust Security Network (RSN). It makes use of a new AES-based algorithm. It was designed from the ground up and is not compatible with older hardware. 
+
+
+### WPA Network Connection
+
+The secure communication channel is setup in four steps:
+
+1. Agreement on security protocols
+2. Authentication
+3. Key distribution and verification
+4. Data encryption and integrity
+
+The below figure to create WPA Enterprise secure communication channel:
+
+![[Pasted image 20241101171218.png]]
+
+In WPA-PSK systems, the process is slightly simplified as only 3 steps are required. The authentication step is removed as illustrated below:
+
+
+![[Pasted image 20241101171530.png]]
+
+**Agreement on Security Protocols**
+The different security protocols allowed by the AP are provided in its beacons:
+
+* Authentication means, either PSK or 802.1X using an AAA server
+* Unicast and multicast/broadcast traffic encryption suite: TKIP, CCMP
+
+The STA first sends a probe request in order to receive network information (i.e. rates, encryption, channel, etc.) and will join the network by using open authentication followed by association where it indicates which ciphers will be used.
+
+### WPA Authentication
+
+The authentication step is only done in enterprise configuration. It is based on the Extensible Authentication Protocol (EAP) and can be done with the following:
+
+* EAP-TLS with client and server certificates
+* EAP-TTLS
+* PEAP for hybrid authentication where only the server certificate is required
+
+The authentication is started when the client selects the authentication mode to use. Several EAP messages, depending on the authentication method will be exchanged between the authenticator and the supplicant in order to generate a Master Key (MK). 
+
+At the end of the procedure, if successful, a "Radius Accept" message is sent to the AP containing the MK and another message, an EAP message send to the client to indicate success. 
+
+**Key Distribution and Verification**
+
+The third phase focuses on the exchange of the different keys used for authentication message integrity, and message encryption. This is done in the 4-way handshake to exchange the Pairwise Transient Key (PTK) and the Group Temporal Key (GTK), respectively the keys use for unicast and multicast/broadcast, and then the Group Key handshake to renew the GTK. 
+
+This part allows:
+
+* Confirmation of the cipher suite used
+* Confirmation of the PMK knowledge of the client
+* Installation of the integrity and encryption keys
+* Send GTK securely
+
+
+An illustration of the key distribution and verification phase:
+
+![[Pasted image 20241101181525.png]]
+
+
+Note: The authenticator is the AP and the supplicant is the STA. 
+
+1. The authenticator sends a nonce to the supplicant called *ANONCE*
+2. The supplicant creates the PTK and sends its nonce, *SNONCE* with the MIC. After the construction of the PTK, it will check if the supplicant has the right PMK. If the MIC check fails, the supplicant has the wrong PMK. 
+3. The message from the authenticator to the supplicant will contain, when WPA2/3 is used, the current GTK. This key is used to decrypt multicast/broadcast traffic. If that message fails to be received, it is re-sent. If 802.11w is negotiated, IGTK is included. With WPA1, GTK will be sent in a later exchange. 
+4. Finally, the supplicant sends an acknowledgement to the authenticator. The supplicant installs the keys and starts encryption.
+
+The group key handshake is much simpler than pairwise keys because it is done after the 4-way handshake (after installing keys) and thus we now have a secure link. It is also done via Extensible Authentication Protocol over LAN (EAPoL) messages but this time, the messages are encrypted. The diagram below illustrates this process.
+
+
+![[Pasted image 20241101184130.png]]
+
+
+This update happens for the following reasons:
+
+* WPA1, after the 4-way handshake
+* A station joins the network
+* A station leaves the network
+* When a timer expires (controlled by the authenticator,  AP)
+* A station can request it by sending an unsolicited confirmation message
+* A station can request by sending an EAPOL-key frame with both Request and Group Key bits set. 
+**Pairwise Transient Key**
+
+The process to generate PTK from the Pairwise Master Key (PMK) is shown below:
+
+![[Pasted image 20241105214754.png]]
+
+**Input**
+It takes both Nonce values, both MAC addresses (supplicant and authenticator), and the PMK. The PMK calculation works as follows:
+
+If the system is WPA personal, it uses the PBKDF2 function with the following values to generate the PSK (the PSK is then used as the PMK). 
+
+* Password, the passphrase
+* SSID (and its length)
+* The number of iteration, 4096
+* The length of the result key, 256 bits
+
+For WPA Enterprise using a RADIUS server, the PMK is generated from the Master Key (obtained during the exchange with the server) via the TLS-PRF function.
+
+**Hash Algorithm**
+PRF-X using HMAC-SHA1, X being 128, 192,256,384,512, or 704 which indicates the size of output in bits.
+
+**Output**
+
+The PTK is then dvided in different keys. Below are the common parts from TKIP and CCMP:
+1. Key Encryption Key (KEK) (128 bits; bits 0-127); used by the AP to encrypt additional data sent to the STA, for example RSN IE or the GTK.
+2. Key Confirmation Key (KCK) (128-bit; bits 128-255): Used to compute the MIC on WPA EAPOL Key Messages
+3. Temporal Key (TK) (128-bits; bits 256-383 or 256-511): Used to encrypt/decrypt unicast data packets
+
+The CCMP PTK size is 384 bits, comprised of the three keys shown above. TKIP requires two more keys for message integrity, thus increasing the PTK size to 512 bits:
+
+* MIC TX Key (64 bit; bits 384-447): Used to compute MIC on unicast data packets sent by the AP
+* MIC RX Key ( 64 bit; bits 448 - 511): Used to compute MIC on unicast data packets sent by the STA
+
+TK is 128-bit unless the following cipher suites are used:
+
+* WEP-40 (40 bits)
+* WEP-104 (104 bits)
+* GCMP -256 (256 bits)
+* CCMP-256 (256 bits)
+* BIP-GMAC-256 (256 bits)
+* BIP-CMAC-256 (256-bits)
+
+**Group Temporal Key**
+
+The GTK is used to encrypt and decrypt multicast/broadcast traffic. Its construction takes place according to the following illustration. Note that the GTK is just a random number, which means any pseudorandom function can be used to generate it. 
+
+![[Pasted image 20241105230500.png]]
+
+
+***Data Encryption and Integrity***
+
+
+There are three different algorithms that can be used for data encryption and integrity:
+
+* Temporal Key Integrity Protocol
+* Counter Mode with CBC-MAC Protocol (CCMP)
+* Wireless Robust authenticated Protocol (WRAP)
+
+**Temporal Key Integrity Protocol**
+
+![[Pasted image 20241105231447.png]]
+
+
+**Counter Mode with CBC-MAC**
+![[Pasted image 20241105231522.png]]
+
+#### Wireless Robust Authenticated Protocol
+
+WRAP is based on AES but uses the Offset Codebook Mode (OCB) cipher and authentication scheme. It was the first to be selected by the 802.11i working group but was abandoned due to intellectual property reasons.
+
+
+## Wi-FI Protected Access 3
+
+Simultaneous Authentication of Equals (SAE) replaces PSK in WPA personal, which is the same encryption method used in mesh networks (802.11s). It is a variant of Dragonfly. In WPA3-only mode, PMF is mandatory. In transition mode, mixed WPA2 and WPA3, PMF is optional in WPA2 and mandatory when establishing a connection in WPA3.
+
+WPA Enterprise gets a 192-bit mode with stronger security protocols. Authentication and encryption will use GCMP-256. Key derivation and confirmation use HMAC -SHA384. Key establishment and authentication use ECDHE and ECDSA using a 384-bit elliptic curve. 
+
+WPA3 doesn't use any new encryption algorithm, but now AES is the only cipher allowed. 
+
+Where WPA/WPA2 (as well as Open networks and WEP) has a simple authentication and association phase, before the 4-way handshake, the authentication phase is reworked and this is where the dragonfly handshake happens. 
+
+There are two phases, or exchanges in the authentication phase. First, a commit exchange followed by a confirm exchange.
+
+There are two phases, or exchanges in the authentication phase. First, a commit exchange followed by a confirm exchange. In the commit exchange, both sides commit to a shared secret. In the confirm exchange, they confirm they both share the same password and then derive a PMK that will be then used in the 4-way exchange.
+
+SAE offers a better way to establish a secure connection by using a Diffie-Hellman (DH) key exchange with an Elliptic Curve or a Prime Modulus.
+
+The following is the list of the different groups for the Diffie-Hellman Exchange:
+
+| Number     | Name                                                  |
+| ---------- | ----------------------------------------------------- |
+| 0          | NONE                                                  |
+| 1          | 768-bit MODP Group                                    |
+| 2          | 1024-bit MODP Group                                   |
+| 3-4        | Reserved                                              |
+| 5          | 1536-bit MODP Group                                   |
+| 6-13       | Unassigned                                            |
+| 14         | 2048-bit MODP Group                                   |
+| 15         | 3072-bit MODP Group                                   |
+| 16         | 4096-bit MODP Group                                   |
+| 17         | 6144-bit MODP Group                                   |
+| 18         | 8192-bit MODP Group                                   |
+| 19         | 256-bit random ECP group                              |
+| 20         | 384-bit random ECP group                              |
+| 21         | 521-bit random ECP group                              |
+| 22         | 1024-bit MODP Group with 160-bit Prime Order Subgroup |
+| 23         | 2048-bit MODP Group with 224-bit Prime Order Subgroup |
+| 24         | 2048-bit MODP Group with 256-bit Prime Order Subgroup |
+| 25         | 192-bit Random ECP Group                              |
+| 26         | 224-bit Random ECP Group                              |
+| 27         | brainpoolP224r1                                       |
+| 28         | brainpoolP256r1                                       |
+| 29         | brainpoolP384r1                                       |
+| 30         | brainpoolP512r1                                       |
+| 31         | Curve25519                                            |
+| 32         | Curve448                                              |
+| 33-1023    | Unassigned                                            |
+| 1024-65535 | Reserved for Private Use                              |
+|            |                                                       |
+
+The bare minimum requires all implementations to support group 19.
+
+
+While all of them could be used, only the groups 15 to 21 are suitable for production due to security reasons. These groups have a prime with 3072 bits and above for FFC and a 256 bits prime and above when it is ECC.
+
+![[Pasted image 20241105232942.png]]
+
+
+## Opportunistic Wireless Encryption
+
+Marketed as Enhanced Open by the Wi-Fi Alliance, OWE allows for the mitigation of attacks and eavesdropping on open networks by encrypting the connections. 
