@@ -659,4 +659,78 @@ While all of them could be used, only the groups 15 to 21 are suitable for produ
 
 ## Opportunistic Wireless Encryption
 
-Marketed as Enhanced Open by the Wi-Fi Alliance, OWE allows for the mitigation of attacks and eavesdropping on open networks by encrypting the connections. 
+Marketed as Enhanced Open by the Wi-Fi Alliance, OWE allows for the mitigation of attacks and eavesdropping on open networks by encrypting the connections. In an Open network situation, the authentication and association is a straightforward process, which leads to network access immediately. There is no authentication or encryption. 
+
+With OWE, Diffie-Hellman exchange is done during the association phase and the result is then used as the secret to do a 4-way handshake. The client upon noticing the access point supports OWE, will had his public key to the Association Request which will be followed by the access point's public key in the Association Process. 
+
+![[Pasted image 20241107212748.png]]
+
+Diffie-Hellman may sound similar to a public key encryption (such as RSA). It is assymetric/public key technology but differs in the fact that it is not an encryption algorithm, it is aimed to generate and exchange a key which is then used for asymmetric encryption. In this case, for the 4-way handshake. 
+
+Like WPA3, it also depends upon PMF and it must set as 'required' on the AP in order for OWE to be available (as opposed to 'optional'). When available, it will be indicated in the Beacon and Probe responses. Specifically, in the Authentication and Key Management (AKM) suite list in the RSN IE.
+
+APs will likely support Transition mode, which allows Open networks and OWE at the same time, so legacy devices can still connect. Transition mode APs may have a separate BSSID/ESSID to handle both types of clients.
+
+The hash algorithm will depend on the size of the key, which is linked to the DH group used. For Elliptic Curve Cryptography (ECC), with keys up to 256bits, SHA-256 is used. Until 384 bits, SHA-384 and for anything above, SHA-512. Using Finite Field Cryptography (FFC), up to 2048bits, SHA-256 will be used. Until 3072 bits, SHA-384 and for anything above, SHA-512.
+
+
+While the Diffie-Hellman groups referenced are the sames as in WPA3, it is believed that only group 19, 20 and 21, which are ECC, will be used in OWE.
+
+When connecting to the Access Point, two specific Information Elements (IE) must present in the association request sent by the client:
+
+1. The RSN IE must indicate OWE AKM
+2. An IE (ID 255) containing the public key and the group. Its content will be as follows:
+- Element ID extension, which is a one octet and has the value of 32
+- Element-specific data, subdivided in two parts, a two-octet field (in little endian), indicating the group used, followed by the public key
+
+The public key encoding depends on its type. If it is FFC, then it must be encoded based on the integer-to-octet-string conversion of RFC6090. ECC is a bit more complex, as it depends on the curve used, which is defined in RFC6090 or RFC7748. On top of it, compact representation must be used if the curve is from RFC6090.
+
+Additional checks must be performed by the receiver of the frames to ensure the validity of the public key and the group before generating the PMK.
+
+Each party needs to perform the following:
+
+1. Diffie-Hellman on one's private key and the other peer's public key
+2. Feed the result to a element-to-scalar mapping function. We'll call the result z
+3. Concatenate one's public key, the other party's public key, the Diffie-Hellman group as octets. This will be used as the salt in HKDF-extract[5](https://portal.offsec.com/courses/pen-210-9545/learning/wi-fi-encryption-15794/opportunistic-wireless-encryption-15854/opportunistic-wireless-encryption-16050#fn-local_id_45-5) along with the key, 'z'. It will generate a pseudo-random key called 'prk'. As mentioned above, the HMAC function used will depend on the key size (HMAC-SHA256, HMAC-SHA384 or HMAC-SHA512)
+4. Generate the PMK to be used in the 4-way handshake with HKDF-expand.[5:1](https://portal.offsec.com/courses/pen-210-9545/learning/wi-fi-encryption-15794/opportunistic-wireless-encryption-15854/opportunistic-wireless-encryption-16050#fn-local_id_45-5) The parameters will be the pseudorandom key, the string "OWE Key Generation" as the context and the length in bits of the hashing algorithm used (256, 384 or 512)
+
+A PMKID will be generated as well, by hashing the concatenation of both party's public keys using SHA256/384 or 512 (depending on the Diffie-Hellman used) and keeping the leftmost 128 bits. The client may choose to do PMK caching to avoid redoing the expensive authentication and indicate the PMKID in its association request. Both client and AP can cache the keys for a certain amount of time. If the access points accepts the PMKID, it will indicate it in the association response. Otherwise, the normal OWE association process will start.
+
+### Wireless Protected Setup (WPS)
+
+Also known as Wi-Fi simple configuration, this protocol allows users to pair devices to a network without having to enter the ESSID and/or its (sometimes complex) passphrase.
+
+In the past, different vendors provided various solutions to this problem but they were incompatible between each other. The Wi-Fi alliance launched WPS in 2006 with the aim of standardizing the solutions.
+
+WPS currently supports Open or WPA2 networks (with CCMP or GCMP) as well as WPA2 Enterprise networks. WPA (TKIP) has been deprecated in the current version of the specification.
+
+Enrollment can be done in various ways such as using a push button on the access point, entering a PIN from a label, via a display on the Access Point, from its web interface (static or dynamic PIN), or using Near Field Communications (NFC) with tap to connect.
+
+#### WPS Architecture
+
+We define three components:
+
+* Enrolee: a device seeking to join a WLAN
+* Access point
+* Registrar: an entity with the authority to issue or revoke credentials for a WLAN
+
+There are 3 interfaces:
+
+* E: Logically located between the Enrolee and the Registrar. The purpose is for the registrar to issue credentials to en Enrolee.
+* M: The interface between the Registrar and the Access Point. It manages and configures the access point.
+* A: enables the discovery of WPS access points (via the IE beacons) and for external registrars, enables communication between the enrolees and the registrars. 
+
+
+![[Pasted image 20241107214759.png]]
+
+
+Although the Registrar often runs on the access point (known as "standalone AP" or "internal registrar"), the Registrar and AP can be distinct systems, such as a mobile device used to configure the Enrollee. The Registrar can also be located on a centralized management interface.
+
+Even though WPS is thought to be WPA-PSK only, it can technically also be used in some cases for WPA Enterprise. In the case of a WPA-PSK network, it is possible to have one client become a registrar and configure new clients.
+
+#### WPS Configuration Method
+
+A device supporting Wi-Fi Simple Configuration should always have a default PIN available (aka device password), printed on the AP or on a label affixed to it. However, it is recommended that the PIN be changeable by the end-user.
+
+Two modes of operations are available: in-band configuration and out-of-band configuration. In-band is done via WLAN communication and out-of-band is done using any other communication channel or method, such as by using a NFC tag or USB thumbdrive.
+
