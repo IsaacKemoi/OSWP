@@ -981,3 +981,337 @@ kali@kali:~$ sudo iwlist wlan0 frequency
 
 ![[Pasted image 20241109151805.png]]
 
+#### The iw Utility
+Even though we could still use iwconfig and other tools thanks to a compatibility layer, they are deprecated and we shouldn't use them anymore. The iw utility and its variety of options is the only command that we need for configuring a Wi-Fi device. 
+
+Assuming the drivers have been loaded properly, running iw list will provide us with lots of detailed information about the wireless devices and their capabilities:
+
+```
+kali@kali:~$ sudo iw list
+```
+
+![[Pasted image 20241109152913.png]]
+
+The output of the above commands shows the the wireless device supports a number of modes, including IBSS (ad hoc), monitor mode, managed mode (client), and AP mode. It also supports frequencies allowed. It also shows the allowed frequencies and the decibel levels. 
+
+![[Pasted image 20241109161222.png]]
+
+To get a list of wireless access points that are within range of our wireless card, we will use *iw* with the *dev wlan0*, which specifies our device. Next, we'll add the *scan* parameter. We then pipe this command through *grep SSID* to filter out output to only wireless network names. 
+
+
+```
+izack@kali:~$ sudo iw dev wlan0 scan | grep SSID
+```
+
+![[Pasted image 20241109161526.png]]
+
+The channel that the target AP is transmitting is a critical piece of information. The *iw dev scan* output can be further refined by piping the results with *egrep* using the logical OR operation (|) to output strings which either contains "DS Parameter set" or "SSID":
+
+```
+izack@kali:~$ sudo iw dev wlan0 scan | egrep "DS Parameter set|SSID:"
+```
+
+![[Pasted image 20241109162229.png]]
+
+We can create Virtual Interface (VIF) named "wlan0mon" in monitor mode using *iw*. 
+
+```
+kali@kali:~$ sudo iw dev wlan0 interface add wlan0mon type monitor
+```
+
+As with many commands, when there is no output displayed, we know the command was successful.
+
+We can list the interfaces using *iw dev*, we should find the newly created interface in the list.
+
+```
+iw dev
+```
+
+With the newly created interface, we need to bring it up with *ip* (newly created interfaces are down by default).
+
+```
+sudo ip link set wlan0mon up
+```
+
+Using the *iw dev info* command, we will be able to inspect the newly created monitor mode interface.
+
+```
+kali@kali:~$ sudo iw dev wlan0mon info
+Interface wlan0mon
+	ifindex 4
+	wdev 0x1
+	addr 0c:0c:ac:ab:a9:08
+	type monitor
+	wiphy 0
+	channel 11 (2462 MHz), width: 20 MHz, center1: 2462 MHz
+```
+
+We can verify that our interface is in monitor mode by starting a sniffer *tcpdump* to capture wireless frames:
+
+```
+kali@kali:~$ sudo tcpdump -i wlan0mon
+tcpdump: verbose output suppressed, use -v or -vv for full protocol decode
+listening on wlan0mon, link-type IEEE802_11_RADIO (802.11 plus radiotap header), capture size 262144 bytes
+13:39:17.873700 2964927396us tsft 1.0 Mb/s 2412 MHz 11b -20dB signal antenna 1 [bit 14] Beacon (wifu) [1.0* 2.0* 5.5* 11.0* 9.0 18.0 36.0 54.0 Mbit] ESS CH: 3, PRIVACY[|802.11]
+```
+
+We can delete the virtual interface using the *iw dev interface del* command. 
+
+```
+sudo iw dev wlan0mon interface del
+```
+
+We can confirm it is deleted using:
+
+```
+sudo iw dev wlan0mon info
+```
+
+Central Regulatory Domain Agent (CRDA), helps radios stay compliant with wireless regulations around the world. It is used by the cfg80211 wireless subsystem to enforce the regulatory domain settings for a given location. Countries' regulations can be fairly complex, and CRDA sets the radio to operate within the regulations of the operating country. Specifically, it enforces transmit power limits on the radio, prevents the radio from transmitting on restricted frequencies, and abides by any other limitation, such as DFS. The *iw reg* command interacts with CRDA to query, and in some cases change it.
+
+To display the current regulatory domain:
+
+```
+sudo iw reg get
+```
+
+To change or set the regulatory domain, we run **iw reg set \<COUNTRY>** where "COUNTRY" is the 2 letter code (ISO/IEC 3166-1 alpha 2 more precisely). For the US we will use:
+
+```
+sudo iw reg set US
+```
+
+The change is not permanent as the setting is only in memory. To make sure that it is always set at boot time, edit the file */etc/default/crda* with a text editor and fill in the REGDOMAIN variable.
+
+Once set to US we check again:
+
+```
+kali@kali:~$ sudo iw reg get
+global
+country US: DFS-FCC
+	(2402 - 2472 @ 40), (N/A, 30), (N/A)
+	(5170 - 5250 @ 80), (N/A, 23), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 23), (0 ms), DFS, AUTO-BW
+	(5490 - 5730 @ 160), (N/A, 23), (0 ms), DFS
+	(5735 - 5835 @ 80), (N/A, 30), (N/A)
+	(57240 - 63720 @ 2160), (N/A, 40), (N/A)
+```
+
+In summary, here is what we can learn from the output:
+
+- In the 2.4GHz band, transmitting is allowed between 2.402GHz and 2.472GHz with up to 40MHz channel width and up to 30dBi power.
+- In the 5GHz band, 5.170 to 5.250GHz is allowed with up to 80MHz channels at 23dBi, 5.250 to 5330GHz with up to 80MHz channels at 23dBi with DFS, 5.490 to 5.730GHz with up to 160MHz channels at 23dBi and DFS, 5.735 to 5.835 with up to 80MHz channels and up to 30dBi.
+- In the 60GHz band, 57.240 to 63.720 GHz is allowed with channels up to 2.160GHz at 40dBi.
+
+
+The regulatory domain we set can sometimes be overridden. CRDA rules processing[3](https://portal.offsec.com/courses/pen-210-9545/learning/linux-wireless-tools,-drivers,-and-stacks-15799/wireless-tools-15881/the-iw-utility-16009#fn-local_id_158-3) is fairly complex, and other factors comes into play to ensure the correct regulatory domain is used. For example, it will be overridden when connecting to an AP that is advertising a country. Some APs allow us to set a country, and will advertise it in their beacons. That may include detailed information on what channels are authorized.
+
+A wireless card can sometimes advertise their regulatory domain through the driver. When plugging in the Alfa AWUS036NHA, it advertises its regulatory domain as GB:
+
+
+
+#### The rfkill Utility
+
+_rfkill_ is a tool to enable or disable connected wireless devices. We can use it for Wi-Fi, as well as for Bluetooth, mobile broadband such as 4G/LTE, 5G, WiMax, GPS, FM, NFC, and any other radio.
+
+Let's run rfkill list to display all the enabled Wi-Fi and Bluetooth devices on the system:\
+
+```
+sudo rfkill list
+```
+
+"Soft blocked" refers to block from rfkill, done in software. 'Hard blocked' refers to a physical switch or BIOS parameter for the device. rfkill can only change soft blocks.
+
+A radio can be disabled (soft blocked) using rfkill block followed by the device's ID number that is displayed in the rfkill list command. Using the previous output, we will execute the rfkill command to disable our Wi-Fi device:
+
+```
+sudo rfkill block 1
+```
+
+We can run rfkill list to list:
+
+```
+kali@kali:~$ sudo rfkill list 1
+1: phy0: Wireless LAN
+	Soft blocked: yes
+	Hard blocked: no
+```
+
+To unblock a device use:
+
+```
+kali@kali:~$ sudo rfkill unblock 1
+kali@kali:~$
+```
+
+We can block all radio devices using:
+
+```
+kali@kali:~$ sudo rfkill block all
+```
+
+To re-enable we can use *unblock all* parameter.
+
+
+### Wireless Stacks and Drivers
+
+The Linux operating system supports two wireless stacks. The ieee80211 subsystem has been deprecated in favor of the more recent mac80211 framework. Because of this, any recent kernel driver will be written using the mac80211 framework. 
+
+We will review both of these as they are both still in use.
+
+#### The ieee80211 Wireless Subsystem
+
+When Wi-Fi first became widely available, we started with the relatively simple ieee80211 subsystem. This was good enough for Linux to interact with the various drivers and provide a common interface to handle Wi-Fi cards.
+
+The Wireless Extension (WE), known as *wext*, is an extension to the Linux networking interface to deal with the specificity of Wi-Fi. It was implemented in three parts that interact with each other.
+
+The first part was as set of tools to control the drivers, with iwconfig, iwlist, iwspy, and iwpriv. The second part was implementing wext in Wi-Fi drivers to answer actions triggered by wireless 
+
+Finally, wext required a middle-man to communicate the actions of the different user tools to the drivers and respond back, which is in the kernel. 
+
+Some early drivers relied on external utilities to control various aspects and capabilities of the wireless card. Each chipset had its own utility but none were compatible with each other. They had different syntax, different capabilities, and each one could only handle its own driver.
+
+The landscape of wireless card drivers, utilities, and standards was still littered with inconsistencies. For example, most drivers could not implement master mode, change the card's power output, or support Wi-Fi Protected Access (WPA). Even the interface names weren't standardized under ieee80211, leading to obvious confusion about when to use "eth", "wifi", "ath", "wlan", etc.
+
+Although wext was a step in the right direction, many wireless drivers still had different capabilities and each one implemented the wireless extensions differently.
+
+#### The mac80211 Wireless Framework
+
+As Wi-Fi evolved and became more complex, the mac80211[1](https://portal.offsec.com/courses/pen-210-9545/learning/linux-wireless-tools,-drivers,-and-stacks-15799/wireless-stacks-and-drivers-15860/the-ieee80211-wireless-subsystem-15997#fn-local_id_162-1) framework was introduced. Mac80211 centralizes a lot of the common code, and has been more flexible to handle newer wireless technologies and differences between chipsets.
+
+The mac80211 wireless framework is included in all modern Linux kernels. Under mac80211, most common functions are standardized. This means that the wireless drivers don't need to re-implement them.
+
+Standardizing the functions led to both new improvements and new requirements. Here is a list of some of those changes:
+
+- Support for 802.11n, 802.11ac, and other modes is built-in.
+- WEP and WPA support is provided via wpa_supplicant,[2](https://portal.offsec.com/courses/pen-210-9545/learning/linux-wireless-tools,-drivers,-and-stacks-15799/wireless-stacks-and-drivers-15860/the-ieee80211-wireless-subsystem-15997#fn-local_id_162-2) the de-facto tool to connect to wireless networks.
+- Common Regulatory Domain with Central Regulatory Domain Agent (CRDA) enforces the different regulations regarding wireless communications in countries around the world (frequencies limitations, output power, and others).
+- Master mode (also known as Access Point mode) requires _Host access point daemon_ (hostapd).[3](https://portal.offsec.com/courses/pen-210-9545/learning/linux-wireless-tools,-drivers,-and-stacks-15799/wireless-stacks-and-drivers-15860/the-ieee80211-wireless-subsystem-15997#fn-local_id_162-3)
+- The iw command is used to manipulate the wireless interface settings instead of iwconfig, iwpriv, iwlist, and iwspy.
+- The process of switching wireless modes is now standardized across all devices/drivers.
+- Wireless interfaces have a common naming convention of "wlan" followed by one or two digits.
+- All functions for the different modes (managed, master, monitor, mesh, etc.) are available for drivers, but not all chipsets support them.
+
+
+mac80211 is actually part of a larger group of software libraries that includes nl80211 and cfg80211.
+
+nl80211[7](https://portal.offsec.com/courses/pen-210-9545/learning/linux-wireless-tools,-drivers,-and-stacks-15799/wireless-stacks-and-drivers-15860/the-mac80211-wireless-framework-15996#fn-local_id_162-7) is the NetLink library dedicated for 802.11, and it helps tools such as wpa_supplicant, hostapd, iw, Wireshark, aircrack-ng, and other packet capture tools to communicate and interact with the drivers in the kernel, through cfg80211. We will discuss these tools later on.
+
+cfg80211[8](https://portal.offsec.com/courses/pen-210-9545/learning/linux-wireless-tools,-drivers,-and-stacks-15799/wireless-stacks-and-drivers-15860/the-mac80211-wireless-framework-15996#fn-local_id_162-8) is part of the Linux kernel. It is the configuration API for 802.11 and interacts directly with FullMAC[9](https://portal.offsec.com/courses/pen-210-9545/learning/linux-wireless-tools,-drivers,-and-stacks-15799/wireless-stacks-and-drivers-15860/the-mac80211-wireless-framework-15996#fn-local_id_162-9) drivers and through mac80211 with SoftMAC drivers.
+
+FullMAC drivers are fully integrated wireless chipsets, such as those in smartphones, with many of the wireless functions built-in to the hardware itself. Only a minimal driver is necessary.
+
+SoftMAC on the other hand, are for simple radios and require more complex drivers. cfg80211 also interacts with the regulatory domain, CRDA, which we will discuss later on. Finally, mac80211 implements all the wireless functions needed for the SoftMAC radio to operate the different wireless modes.
+
+The following diagram[10](https://portal.offsec.com/courses/pen-210-9545/learning/linux-wireless-tools,-drivers,-and-stacks-15799/wireless-stacks-and-drivers-15860/the-mac80211-wireless-framework-15996#fn-local_id_162-10) shows how these libraries interact together.
+
+![[Pasted image 20241109190353.png]]
+
+Figure above shows a FullMAC driver, brcmfmac,[11](https://portal.offsec.com/courses/pen-210-9545/learning/linux-wireless-tools,-drivers,-and-stacks-15799/wireless-stacks-and-drivers-15860/the-mac80211-wireless-framework-15996#fn-local_id_162-11) which is used with some Broadcom chips. On the other side, we find iwlwifi,[12](https://portal.offsec.com/courses/pen-210-9545/learning/linux-wireless-tools,-drivers,-and-stacks-15799/wireless-stacks-and-drivers-15860/the-mac80211-wireless-framework-15996#fn-local_id_162-12) a softMAC driver that handles recent Intel chipsets.
+
+In wireless, we have the MAC Sublayer Management Entity (MLME), which takes care of the following management operations:
+
+- Authentication
+- Deauthentication
+- Association
+- Disassociation
+- Reassociation
+- Beaconing
+
+FullMAC have all MLME operations (or a subset of the above) done by the wireless hardware itself and its firmware. An advantage of FullMAC is that it improves power consumption, which is critical on mobile chipsets and other low power computing devices. It also gives more control from vendors over what operations can be done using their hardware. It does, however, comes at a cost. Wi-Fi operations are complex and so is their code base. No implementation is exempt from bugs.[13](https://portal.offsec.com/courses/pen-210-9545/learning/linux-wireless-tools,-drivers,-and-stacks-15799/wireless-stacks-and-drivers-15860/the-mac80211-wireless-framework-15996#fn-local_id_162-13)
+
+For SoftMAC devices, everything is implemented in the software of the driver's framework. All SoftMAC drivers using mac80211 will benefit from security fixes, improvements, and other bugs fixed with the framework. With Linux kernel releases or when a Linux distribution releases security fixes, all SoftMAC drivers are updated. FullMAC drivers, on the other hand, require their respective vendors to release fixes.
+
+## Wireshark Essentials
+
+Wireshark previously known as Ethereal, is the de-facto packet analysis tool. Wireshark can dissect a large number of common protocols, including Ethernet, IP, TCP, UDP, and 802.11, and more esoteric ones including ATM and EtherCAT. It handles live capture on different mediums, can open or save data in a number of capture formats, and allows us to do analysis and data graphing. The display  and capture filters allows us to narrow down the amount of data displayed and received which often comes in handy.
+
+Wireshark is available in GUI and as a command line tool tshark. Wireshark includes other command line tools including, *dumpcap*, which handles packet capture but does not do any dissection, and *SSHdump* which simplifies remote packet capture via SSH. A number of other utilities are also provided.
+
+### Fundamentals
+
+Wireshark by default captures Ethernet packets, even when we are using a wireless interface. In order to collect only raw wireless frames, the Wi-Fi adapter must be put in monitor mode prior to launching Wireshark.
+
+```
+sudo ip link set wlan0 down
+```
+
+```
+sudo iwconfig wlan0 mode monitor
+```
+
+```
+sudo ip link set wlan0 up
+```
+
+
+
+Wireshark does not channel hop. It will stay on whatever channel the wireless adapter is currently on. To quickly scan all channels on 2.4GHz, we can run the following shell script in the background in a terminal.
+
+```
+for channel in 1 6 11 2 7 10 3 8 4 9 5
+do
+  iw dev wlan0mon set channel ${channel}
+  sleep 1
+done
+```
+
+We could also use *airodump-ng* to do channel hopping. Airodump-ng is meant to be a full-blown tool to capture wireless frames and as a handy default behavior of channel hopping without saving data. Running the below command will achieve the same results as the above command:
+
+```
+sudo airodump-ng wlan0mon
+```
+
+We can save the capture in different formats. The most common format is PCAP, the capture file may be compressed with GZIP to save disk space.
+
+Two of the less common formats such as PCAPng and nanosecond PCAP can both be accurate to the nanosecond. They are a thousand times more precise than PCAP, which uses microsecond precision. Having said this, the regular PCAP format works just fine for most scenarios and it also has excellent compatibility with other tools handling packet captures.
+
+
+### Wireshark Filters
+
+Wireshark uses two types of filters:
+
+1. *Display filters* - Which limit the packets that are displayed
+2. *Capture Filters* - Which limit the packets that are captured
+
+
+#### Wireshark Display Filters
+
+We can create our own display filters under *Analyzer* > *Display Filter Expressions* using Fields (Which can be considered as objects with attributes or properties) and relations (\==, !=, contains, matches) to filter for specific packets. The fields are categorized in a logical manner. 
+
+In certain packet fields such as *wlan.fc.type* the *Predefined Values* window contains a number of options that relate to different byte values. For example wlan.fc.type can have four different values:0,1,2,3. These related to *Management, Control,Data, and Extension* frames respectively. 
+
+**Packet Details**
+
+We can also build filters based on items from a selected packet. We can filter based on the packet details of one packet.
+
+**Display Filters Bookmarks**
+
+When doing a lot of packet filtering, we may want to reuse filters. This is where the bookmark comes in handy. They allow us to save display filters for later use. 
+
+To search for BSSID of specific AP, we can use the filter *wlan.addr == 5C:E9:31:BE:DD:40*
+
+
+### Wireshark Capture Filters
+
+Capture Filters allow Wireshark to only capture a specific type of data. There are a number of reasons why we might want to use capture filters instead of display filters. 
+
+When capturing, Wireshark and tshark temporarily store and dissect each packet in memory (unless specified otherwise in the options). As the amount of data increases, the memory and CPU requirement grow. If packets can't be dissected, they are dropped, and one of those dropped packets could contain crucial information. Using a capture filter allows us to cut down on the amount of data captured so we can focus on the data that we really need.
+
+Another reason to use a capture filter is when we are only allowed to look at specific traffic, such as when isolating traffic of one or more devices.
+
+We need to be careful when creating this type of filter, as we can't recover data that we don't capture. If we make a mistake with a display filter, we can simply remove the filter to "unhide" the necessary packets.
+
+Capture filters on Wi-Fi are limited to filtering on:
+
+1. MAC addresses and on 
+2. Frame types/subtypes. 
+
+
+They are documented in the *pcap-filter* man page. 
+
+
+For example we might want to filter out beacons Wi-Fi frames. Beacons are the most common types of Wi-Fi frames that are sent by the AP approximately 10 times per second. Beacon frames aren't particularly useful when looking at traffic and are often the first type of frames excluded using display filters. We can save a bit of time by filtering them beforehand.
+
+In the capture filter we can use the "not subtype beacon" filter not to capture beacon frames.
+
