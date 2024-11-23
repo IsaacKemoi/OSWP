@@ -1315,3 +1315,83 @@ For example we might want to filter out beacons Wi-Fi frames. Beacons are the mo
 
 In the capture filter we can use the "not subtype beacon" filter not to capture beacon frames.
 
+Capture filters also allow us to refine our results based on the values in each frame we receive. One of those values contained in a wireless frame is between one and four MAC address. To only capture frames from a specific device, we'll have to build a filter to match one of these addresses:
+
+Let's try and capture the wireless traffic of the device 3A:30:F9:0F:E1:95. To ensure we capture all relevant traffic, let's include all four possible locations where our MAC address might appear.
+
+```
+(wlan addr1 3A:30:F9:0F:E1:95) or (wlan addr2 3A:30:F9:0F:E1:95) or (wlan addr3 3A:30:F9:0F:E1:95) or (wlan addr4 3A:30:F9:0F:E1:95)
+```
+
+
+When can combine the above filter with our earlier capture filter for removing beacons. 
+
+```
+((wlan addr1 3A:30:F9:0F:E1:95) or (wlan addr2 3A:30:F9:0F:E1:95) or (wlan addr3 3A:30:F9:0F:E1:95) or (wlan addr4 3A:30:F9:0F:E1:95)) and (not subtype beacon)
+```
+
+
+We can further filter to remove control frames we don't need such as Acknolwedgment, requests to send (rts), clear to send (cts), etc. We can filter these out with "not type control". 
+
+There are other control frames we filter out as well. Let's cut out management frames we don't need such as probe requests and response. We can do this with "not subtype prob_req" and "not subtype prob-resp". We will add this to our capture filter:
+
+```
+((wlan addr1 3A:30:F9:0F:E1:95) or (wlan addr2 3A:30:F9:0F:E1:95) or (wlan addr3 3A:30:F9:0F:E1:95) or (wlan addr4 3A:30:F9:0F:E1:95)) and not (subtype beacon) and not (type ctl) and not (subtype probe-req) and not (subtype probe-resp)
+```
+
+
+To understand the Address Fields in 802.11 frames.
+
+1. https://80211notes.blogspot.com/2013/09/understanding-address-fields-in-80211.html
+
+### Exercise
+1. Beacons (--> Use "subtype beacon")
+2. Probes (requests and responses)
+3. Association (requests and responses)
+4. Data (any)
+5. A specific MAC address
+
+### Wireshark at the Command Line
+
+There are interesting commands we can use with the 'Wireshark' command line. 
+
+-D to list interfaces
+
+```
+sudo wireshark -D
+```
+
+-i to select interface. Using a hyphen as input to the interface will capture on STDIN. This will come in handy when using pipes.
+
+*-k* options automatically starts the capture. 
+
+*-I* option switches on Monitor mode on the specified interface.
+
+```
+sudo wireshark -i wlan0 -I -k
+```
+
+
+We can add a beacon frame capture filter using *-f* option.
+
+```
+sudo wireshark -i wlan0mon -k -f "not subtype beacon"
+```
+
+Wireshark can capture the first few bytes of each frame instead of the full frame with -s option followed by the length in bytes.
+
+
+```
+sudo wireshark -i wlan0mon -k -s 60
+```
+
+We can also use Wireshark to simply open capture files, with or without additional parameters. If we use parameters, we have to specify them _before_ the capture filename. Capture files usually have an extension of .cap or .pcap.
+
+```
+wireshark wifi.pcap
+```
+
+
+
+
+
