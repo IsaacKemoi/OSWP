@@ -2652,6 +2652,11 @@ _wpa_passphrase_[1](https://portal.offsec.com/courses/pen-210-9545/learning/wire
 
 The wpa_passphrase command requires one parameter, the SSID. The second parameter, a passphrase, is optional. If we don't provide a passphrase, it will prompt for user input. For security reasons, we don't recommend providing the passphrase as every command typed in a shell is saved in the history.
 
+We use the below command to generate the 
+
+```
+wpa_passphrase <ESSID> <Password>
+```
 
 ![[Pasted image 20241126230125.png]]
 
@@ -2673,4 +2678,192 @@ We can use a display filter to focus the statistics using certain packets or dev
 Expanding the only BSSID left reveals all the MAC addresses linked to it. This will include the broadcast address and BSSID itself as indicated by the "Base station" in the last column.
 
 We can export the summary can by clicking on _Save as..._. The resulting file contains the following.
+
+#### Exercises
+
+1. Open wpa-Induction.pcap and enable coloring rules with the rules available in Wireshark's website. Locate and identify the authentication (pink), association (light blue and light green), and the four EAPoL (dark green) frames. All these frames should be close-by.
+2. Using display filters, use "eapol" to locate EAPoL frames and "wlan.fc.type_subtype in {0x0 0x1 0xb}" to locate association request/response and authentication frames.
+3. Add a column for the data rate, which can be found in the _802.11 radio information_, and search for frames with a rate of 54 (Mbit).
+4. Set-up a WPA access point with a passphrase of your choice containing special characters. Start a packet capture and connect a device. Browse the web for a little while, then stop the capture.
+5. Use wpa_passphrase to generate the PMK, then add it in Wireshark to decrypt the capture. If all four EAPoL frames and beacons are present, DNS queries, HTTP, TLS, and other protocols should be displayed.
+
+
+
+#### Solution
+
+1. We can identify the different packets using the coloring rules (Authentication, Association, EAPOL)
+
+![[Pasted image 20241129235105.png]]
+
+2. To filter for EAPO frames we can use "eapol" display filter and the below for capturing Association request and response. 
+
+
+```
+wlan.fc.type_subtype in {0x0, 0x1, 0xb}
+```
+
+
+3. To filter on the data rate use the below filter:
+
+```
+wlan_radio.data_rate == 54
+```
+
+
+## Frames and Network Interaction
+
+A number of different frames are used in order to ensure that everything gets through as efficiently as possible. 
+
+* The object of this module is to understand more about frames used in Wi-Fi networks, including their headers and fields. 
+* We will also learn how wireless devices interact with various types of networks
+
+### Packets vs Frames
+
+Packets and Frames are not interchangeable terms. A packet is the Protocol Data Unit for the Network Layer (layer 3), while a Frame is a unit in the data link layer. Packet capture is actually a misnomer because some hardware can capture at layer 3, but some at layer 2. Some specialized tools can even capture at the physical layer.
+
+In spite of this, "Packet Capture" has become a common term for data captured at either layer 2 or 3. In our case, all of our captures, and most of the tools we will use, operate at layer 2.
+
+### 802.11 MAC Frames
+
+
+The figure below depicts the overall structure of a 802.11 MAC frame.
+
+![[Pasted image 20241130122024.png]]
+
+The structure is split in threee parts:
+
+* MAC Headers  - Contains fields that are common for all frames. The first few fields are mandatory and others may be present depending on the specific frame.
+* Frame Body - Carries data or contains additional information. Not all frames will used this section.
+* Frame Check Sequence (FCS) - is the Cyclical Redundancy Check (CRC) of the current wireless frame. A CRC is performed over all previous fields to generate the FCS. The frame FCS is re-calculated once the frame arrives at the destination. If it is identical to the one received, then the frame is received without errors. It sometimes isn't present in the captured frames.
+* In capture files, sometimes Radiotap headers come before the MAC header. These headers are placed by the driver on the receiver, and contains metadata for the specific frame , including the signal level , the rate, the channel it was received on, and other information. The content and size vary from one driver to another and sometimes from one frame to another.
+
+
+#### MAC Header
+
+The following image shows the details of the *Header* field of a 802.11 MAC frame.
+
+![[Pasted image 20241130130516.png]]
+
+
+**Frame Control Field**
+
+* Protocol version - Provides the version of the 802.11 protocol used. This value is currently 0
+* *Type* - The type is most important field in the frame, and it determines the function of the frame, as well as the presence of some other fields in the frame. There are four different frame types with corresponding values: management (0), control (1), data (2), and extension (3). We will cover the first three later in this module. The fourth is a rare exception, so we won't cover it.
+* *Subtype* - Each frame type can have one of several subtype field values. These determine the specific function and define the payload.
+* *To DS* and *From DS*  - These fields indicate whether the frame is going into a distribution system (ToDS) or exiting the distribution system (FromDS)
+* *MoreFrag* - This field indicates whether more fragments of the frame will follow this one.
+* *Retry* - The retry field tells us if the frame is being retransmitted. A retransmit occurs when unicast frames aren't acknowledged in time.
+* *Power Mgmt* - This will show us whether the sending client is in active mode (0) or power-save mode (1).
+* *More Data* - This field indicates if there is data buffered for a client.
+* *Protected Frame* - This will reveal whether or not encryption or authentication are used in the frame.
+* *+HTC/Order* - This field tells us if the frame contains an HT Control Field.[1](https://portal.offsec.com/courses/pen-210-9545/learning/frames-and-network-interaction-15800/80211-mac-frames-15849/mac-header-16007#fn-local_id_48-1) In some rare instances, it is used to indicate that the frame is being sent using the Strictly-Ordered service class.
+
+**Duration/ID**
+
+Depending on the frame type and subtype, Duration/ID can have a different meaning. In Power-Save Poll frames (type 1, subtype 10), it contains the client Association Identity (AID) in the 14 least significant bits. The two most significant bits are set. When required, Duration/ID is the duration of the frame in microseconds. In some instances, it has a fixed value of 32768.
+
+**Addresses**
+The following table represents the different cases of these addresses, depending on the From/To DS bits in the Frame Control field.
+
+
+|FromDS|ToDS|Address 1|Address 2|Address 3|Address 4|
+|---|---|---|---|---|---|
+|0|0|Destination Address|Source Address|BSSID|n/a|
+|0|1|BSSID|Source Address|Destination Address|n/a|
+|1|0|Destination Address|BSSID|Source Address|n/a|
+|1|1|Recipient Address|Transmitter Address|Destination Address|Source Address|
+
+The first case, where ToDS and FromDS are both set to 0, will occur in IBSS mode (ad-hoc) or when the frame is a management or control frame. The _FromDS_ and _ToDS_ bits are not set as is the case when two clients communicate with one another directly, but this is rarely the case nowadays.
+
+When only ToDS is set, the traffic is coming from a client and meant to reach either the AP or anything connected to it. This would be the case with a ping (ICMP request).
+
+When only FromDS is set, the traffic is going from the AP to the client. Recalling the previous example, this would be a response to the ping.
+
+When both are set, it indicates we are in WDS mode. In this case, one AP is talking to the another, which is why the fourth address field is present in the frame.
+
+**Sequence Control**
+
+The Sequence Control field consists of two sub-fields and is used to recognize frame duplication.
+
+The _Sequence Number (12 bit)_ subfield indicates the sequence number of each frame. The sequence number is the same for each frame sent for a fragmented frame. The value range for this field is 0-4095. When it reaches 4095, the next sequence will be 0.
+
+The _Fragment Number (4 bit)_ subfield indicates the number of each fragment of a frame sent. The value range for this field is 0-15.
+
+#### QoS control and HT Control Fields
+
+The presence of the QoS control and HT Control fields depend on other values in the frame body. The _QoS Control_[2](https://portal.offsec.com/courses/pen-210-9545/learning/frames-and-network-interaction-15800/80211-mac-frames-15849/mac-header-16007#fn-local_id_48-2) is present only in Quality of Service (QoS) data frames to indicate the quality of service parameters. The _HT Control_ is only present if the _+HTC/Order_ bit is set.
+
+Further reading:
+
+1.  [https://mrncciew.com/2014/10/20/cwap-ht-control-field/](https://mrncciew.com/2014/10/20/cwap-ht-control-field/) [↩︎](https://portal.offsec.com/courses/pen-210-9545/learning/frames-and-network-interaction-15800/80211-mac-frames-15849/mac-header-16007#fnref-local_id_48-1)
+2. [https://mrncciew.com/2014/10/03/cwap-mac-header-qos-control/](https://mrncciew.com/2014/10/03/cwap-mac-header-qos-control/) [↩︎](https://portal.offsec.com/courses/pen-210-9545/learning/frames-and-network-interaction-15800/80211-mac-frames-15849/mac-header-16007#fnref-local_id_48-2)
+
+### Frame Types
+
+Understanding of the common types of frames we'll encounter on Wi-Fi Networks is an essential knowledge. We'll focus on aspects of the frame types that help describe how devices interact with each other. 
+
+The following frame types are important for our purpose:
+
+* Management
+* Control
+* Data Frames
+* Extension ( not very common)
+
+#### Management Frames
+
+Management frames are used to negotiate and control the relationship between AP and Clients. The following table summarizes the different types (subtypes) of management frames:
+
+|Subtype|Field Description|
+|---|---|
+|0|Association Request|
+|1|Association Response|
+|2|Re-association Request|
+|3|Re-association Response|
+|4|Probe Request|
+|5|Probe Response|
+|6|Measurement Pilot|
+|7|Reserved|
+|8|Beacon|
+|9|ATIM|
+|10|Disassociation|
+|11|Authentication|
+|12|Deauthentication|
+|13|Action|
+|14|Action No ACK|
+|15|Reserved|
+All these frames have similar structure as the base MAC 802.11 frame. The payload varies depending on the subtype.
+
+##### Beacon
+Beacon frames are the most common frames as they are sent approximately 10 times per second. Beacons are broadcast by the AP to keep the network syncronised.
+
+The beacon frame contains useful information about the network such as the SSID (unless it is hidden), the channel, data rate available, type of encryption and the regulatory domain. They are typically sent at the lowest basic rate in order to reach the clients farthest away from the AP. 
+
+The structure of a beacon frame is as follows:
+![[Pasted image 20241130181458.png]]
+
+Although SSID and ESSID are used interchangeably in Wi-Fi tools and AP configuration, there is a small difference. SSID is for single APs. ESSID is when multiple APs in an Extended Service Set (ESS) share the same SSID. The official name of the field in management frames is SSID.
+
+The information in the frame's payload is split into 2 parts. The first part contains fixed parameters, which will always stay the same. The first parameter includes *Timestamp*, which contains an 8-bytes value for a *Timing Syncronization Function* (TFS). *Beacon Interval* indicates how often the beacons are sent. It is expressed in Time Units (TU) where 1 TU is 1.024 ms. *Capabilities Information* is subdivided into 14 flags. 
+
+*Information Elements* are variable in size but have a common structure. The first byte indicates the ID of the element and describes how the payload is interpreted. The second indicates the length of the following field (IE payload), which has a maximum length of 255 bytes. 
+
+![[Pasted image 20241130183258.png]]
+
+Information Elements are usually arranged in order based on the ID. In special cases, some IDs are shared among multiple items, so their meaning depends also on the first few bytes in the IE's payload. A good example of this is WPA TKIP, where it depends on the first three bytes in the payload. The other special case is the Element ID Extension, which depends on the value of the first byte of its payload. This is used for 802.11ax information among other things.
+
+Although this section is dynamic, some elements such as the SSID will always be present. Figure 5 includes the SSID element, which has an ID of _0_. The length of the field is _8_ and it is named _supafast_.
+
+![[Pasted image 20241130184934.png]]
+
+Another field to note in the capture is the Supported Rates of the AP. It shows rates of 6 to 54Mbit/s, which, alone, indicates either an 802.11g or 802.11a network.
+
+![[Pasted image 20241130185122.png]]
+
+A 802.11b or mixed 802.11b/g would have these rates between 1 and 11. A mixed 802.11b/g will also have extended supported rates typically between 6 and 54, but this isn't the case in the extended rates below.
+
+![[Pasted image 20241130185246.png]]
+
+The channel number, _36_, indicates the network is operating in the 5GHz band.
+
+![[Pasted image 20241130185415.png]]
 
