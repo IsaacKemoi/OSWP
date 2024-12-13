@@ -2867,3 +2867,306 @@ The channel number, _36_, indicates the network is operating in the 5GHz band.
 
 ![[Pasted image 20241130185415.png]]
 
+The country element indicates the regulatory domain, channels availability, and transmit power. Clients sometimes use it to further improve their compliance. On Linux this is called "beacon hinting". 
+
+![[Pasted image 20241212182934.png]]
+
+On this particular AP, the regulatory domain is set to US. It gives a set of channels, as well as maximum transmit power. Eight channels are available at a transmit power of 23dBm, starting at channel 36 (40, 44, 48, 52, 56, 60, and 64). There are 11 channels starting at 100 with 23dBm (104, 108, 112, 116, 120, 124, 128, 136, and 140). There are five channels starting at 149 with 30dBm (153, 157, 161, and 165). The reason why it doesn't give precise channel numbers for every single one is because in the 5GHz band they are always separated by 20MHz, which is 4 channels apart, and they don't overlap.
+
+The _HT Capabilities_ and _HT Information_ elements, indicate whether the AP supports High Throughput (HT), or 802.11n, and include other relevant information.
+
+![[Pasted image 20241212184829.png]]
+
+Two elements, _VHT Capabilities_ and _VHT Operation_, indicate the presence of Very High Throughput (VHT), or 802.11ac, and the features supported. Another similarly named field, _VHT Tx Power Envelope_, helps further improve regulatory compliance.
+
+![[Pasted image 20241212184847.png]]
+
+This AP also supports 80MHz channels, with a center channel at 42. It spans from channels 36 to 48, or 5.170GHz to 5.250GHz. If the second centered segment was filled, it would support 160MHz channels or 80+80MHz. The difference is if it ends up being a contiguous 160MHz or not; 80+80 are two 80MHz channels which aren't next to each other.
+
+Finally, the _HE Capabilities_ and _HE Operation_ elements indicate High Efficiency (HE), or 802.11ax, and the features supported.
+
+![[Pasted image 20241212184934.png]]
+
+The AP supports 80MHz in HE, as indicated by the _Rx and Tx MCS Map_. It only has one stream, as indicated by the first line in _Basic HE-MCS and NSS Set_, with rates using MCS 0 to 7, which means up to 360Mbit/s.
+
+***Probe***
+
+Probe frames are used to scan for existing APs. Probe requests are sent by clients searching for APs, and they are often sent on multiple channels. An AP will answer with a probe response that contains information about itself.
+
+Probe requests may contain specific criteria, including for example, encryption and rates. APs or ad-hoc (IBSS) nodes will only respond to probe requests that match what they offer. When the probe request is directed to a specific SSID, only the AP with that SSID will respond. 
+
+The structure of probe requests and responses is similar to beacons. Probe request payloads only consist of IEs. The response, which comes from the AP, will contain both the same static and the same dynamic section as the beacon.
+
+A probe request will contain at the very least a SSID IE. It may contain more, depending on the device.
+
+The following capture includes a broadcast probe request.
+
+![[Pasted image 20241212185853.png]]
+
+A probe response, from the AP, follows the request.
+
+![[Pasted image 20241212190107.png]]
+
+***Authentication***
+Authentication frames are used when connecting to an AP. There is no authentication request or response. Both the client and the AP use the same authentication frame.
+
+The payload contains four fields.
+
+![[Pasted image 20241212190426.png]]
+
+Within an authentication frame, the _Authentication Algorithm_ identifies the type of authentication used. The most common is _Open authentication_, but we will also encounter _Simultaneous Authentication of Equals,_ which is used with WPA3, and in rare cases, _Shared Authentication_, which is used with WEP Shared Authentication.
+
+The authentication process consists of several authentication frames (the exact number of frames exchanged can vary). The _Authentication Transaction Sequence Number_ keeps track of the current state of the authentication process and will usually be a value between 1 and 4.
+
+The _Status Code_ indicates success (_0_) or failure (other values). Other than _0_, each value indicates a different type of failure.
+
+*MAC filtering is an after-thought by vendors, and not part of the 802.11 standard. Implementation varies from one vendor to another. When MAC filtering is enabled on the AP and the MAC address of the client is not authorized to connect, the AP may or may not answer. If it does answer, it can either indicate a failure, or success.*
+
+Depending on the authentication algorithm and the sequence number, the frame sometimes contain data after all these fields. The meaning of the data in this section depends on the value of the authentication algorithm and the authentication sequence fields.
+
+In the following figure, a client is starting an open authentication phase with an AP.
+
+![[Pasted image 20241212190903.png]]
+
+The second frame includes the response from the AP.
+
+![[Pasted image 20241212190917.png]]
+
+***Association***
+
+Association frames are used to connect to an AP and are always preceded by authentication frames. The client sends an association request, which is usually followed by an association response from the AP.
+
+![[Pasted image 20241212191130.png]]
+
+
+The capabilities are identical to the beacon frame. The listen interval is expressed in TU and indicates how often it will wake up to listen to beacons when in power-save mode. Although it is followed by optional IEs, an SSID IE, along with one of the supported rates field, are required to associate to the AP. When connecting to an AP with encryption, the selected encryption parameters must be specified in this frame as well.
+
+
+The following figure contains an association request for the "airport-wifi" network.
+
+![[Pasted image 20241212191822.png]]
+
+APs reject or accept an Association Request with an Association Response.
+
+*When MAC filtering is in place and the MAC address is not authorized, the behavior of the AP can vary. It will either ignore or deny the device.*
+
+The Association Response has the following structure.
+
+![[Pasted image 20241212191919.png]]
+
+Figure 20 includes a successful association response as indicated by the _Status code_
+
+![[Pasted image 20241212192010.png]]
+
+***Deauthentication***
+
+
+Deauthentication frames invalidate the authentication between a client and an AP. While they are used in attacks, they also occur when a client is disconnecting or when the AP forces the client to re-authenticate for security reasons. 
+
+Deauthentication frame structure consists of one 2-byte long field in the frame body. This field the *Reason Code*, indicates the reason for deauthentication. 
+
+In the following frame, the client is disconnecting and *uses a reason code 3* ("Deauthenticated because sending STA is leaving"). 
+
+![[Pasted image 20241212201529.png]]
+
+In the next example, the frame was sent by aireplay-ng to the BSSID 00:89:6e:1a:43:90. It uses the reason code 7 ("Class 3 frame received from nonassociated client").
+
+![[Pasted image 20241212201550.png]]
+
+#### Control Frames
+
+Control frames help to deliver data frames as well as other unicast frames. They need to be heard reliably, so they are short and sent at a low rate. The following table shows the different types of control frames.
+
+|Subtype|Field Description|
+|---|---|
+|0-6|Reserved|
+|7|Control Wrapper|
+|8|Block ACK Request|
+|9|Block ACK|
+|10|PS-Poll|
+|11|RTS|
+|12|CTS|
+|13|ACK|
+|14|CF End|
+|15|CF End + CF-ACK|
+
+***ACK***
+
+An ACK frame tells the sending client that the frame was received correctly. These frames are sent for each unicast (directed towards a specific device) frame sent.
+
+![[Pasted image 20241212204551.png]]
+
+Below is a capture of ACK frame:
+
+![[Pasted image 20241212204945.png]]
+
+The ACK frame has a _Type_ field set to 1, which means it is a control frame. The ACK _Subtype_ field is 13.
+
+Block ACK allows one to disable ACK for a certain number of frames and then acknowledge them, which improves throughput. They contain a bitmap of the fragments and each bit represents the status of one of them (ACK/NACK).
+
+***RTS/CTS***
+
+RTS/CTS is a supplement to the CSMA/CA mechanism that helps in reducing collisions. It adds overhead to the wireless communication, because additional frames have to be added before and after the communication. Figure below illustrates
+![[Pasted image 20241212205206.png]]
+
+First, Node 1 sends a "Request to Send" to Node 2. If there was no collision and the request is accepted, Node 2 sends a "Clear to Send" to Node 1 telling it to proceed. Other devices in the surroundings hearing the CTS wait as well. Next, Node 1 sends its data. The data is acknowledged with an ACK frame by Node 2. If the data send fails, no ACK frame is sent.
+
+Let's review the RTS frame structure, which has a length of 20 bytes.
+
+![[Pasted image 20241212205257.png]]
+
+By comparison, a CTS frame has the same length (14 bytes) and structure as an ACK frame.
+
+![[Pasted image 20241212205350.png]]
+
+RTS/CTS in action:
+
+![[Pasted image 20241212205619.png]]
+
+Let's review this capture frame-by-frame to start getting a better understanding of how this transaction takes place.
+
+In the second frame, the AP sends a RTS to the client. Notice that the frame _Type_ is 1 (Control frame) and the _Subtype_ is 11 (RTS).
+
+![[Pasted image 20241212210511.png]]
+
+In the following frame, the client responds to the AP with CTS. The _Subtype_ of the frame is 12 (CTS).
+
+![[Pasted image 20241212210530.png]]
+
+After it receives a CTS message from the client, the AP sends a data frame from the internal network.
+
+![[Pasted image 20241212210601.png]]
+
+
+
+Once it has successfully received the data frame, the client sends an ACK (_Subtype_ 13) back to the AP.
+
+![[Pasted image 20241212210625.png]]
+
+In some instances, devices use CTS-to-self[3](https://portal.offsec.com/courses/pen-210-9545/learning/frames-and-network-interaction-15800/frame-types-15847/control-frames-16004?category=in-progress#fn-local_id_466-3) protection mechanism before sending data. As mentioned earlier, all other devices hearing CTS will hold before transmitting. The amount of time to wait is specified in this frame's _duration_ field, displayed in Figure 31. As a result, some devices send a CTS before their transmission in improve the likelihood of a successful transfer.
+
+### Data Frames
+Data frames are primarily used to carry data between devices. Below are the different types of data frames:
+
+| Subtype | Field Description              |
+| ------- | ------------------------------ |
+| 0       | Data                           |
+| 1       | Data + CF ACK                  |
+| 2       | Data + CF Poll                 |
+| 3       | Data + CF ACK + CF Poll        |
+| 4       | Null Function (No Data)        |
+| 5       | CF ACK (No Data)               |
+| 6       | CF Poll (No Data)              |
+| 7       | CF ACK + CF Poll (No Data)     |
+| 8       | QoS Data                       |
+| 9       | QoS Data + CF ACK              |
+| 10      | QoS Data + CF Poll             |
+| 11      | QoS Data + CF ACK + CF Poll    |
+| 12      | QoS Null (No Data)             |
+| 13      | Reserved                       |
+| 14      | QoS CF Poll (No Data)          |
+| 15      | QoS CF ACK + CF Poll (No Data) |
+
+The most common data frames are Data (subtype 0), Null Function (subtype 4), and their equivalent with QoS (subtypes 8 and 12 respectively).
+
+QoS data frames are used when prioritizing traffic sensitive to delays, such as voice or video. They contain a *QoS Control field* before the payload.
+
+***Data***
+
+Let's analyze a DHCP request captured on an open network. It happens to be a QoS data frame.
+
+![[Pasted image 20241212212705.png]]
+
+***Null Data***
+
+Null frames consist only of MAC headers and a FCS. Clients use them when they are going into power-saving mode.
+
+Below, where we note that the power management (PWR MGT) bit is set.
+
+![[Pasted image 20241212213216.png]]
+
+When the client exits power-saving mode, it will send the same frame with the power management bit reset. The AP will send the client any buffered frames that are waiting.
+
+### Interacting with Networks
+
+We can separate the process of connecting to a wireless network into 3 steps: probe, authentication, and association. 
+
+![[Pasted image 20241212221921.png]]
+
+***Probe***: During the **probe** stage, the client first sends a probe on all channels to discover an AP. Then the APs that are in range answer the probe request.
+
+***Authentication***: During authentication, the client will usually select the AP with the strongest signal whose SSID was previously chosen in the OS user interface. The actual authentication process varies based on for example the type of encryption. This stages ends when the AP sends a response to the authentication. 
+
+***Association***: The client sends an association request. As with authentication, this stage also varies. Once this stage has been completed, the client can communicate with the network.
+
+When WPA encryption is used or when on *Opportunistic Wireless Encryption (OWE)* networks, there is one more step. After association, a client is required to go through key exchanges and verification. This is required to be able to use the network.
+
+#### Open Network
+
+
+
+
+#### WEP (Wired Encryption Equivalent)
+
+There are 2 types of authentication for WEP:
+
+* WEP Open authentication
+* WEP Shared Authentication
+
+With Open Authentication the process is identical to an open network. With shared authentication, the client receives a random data called challenge text from the AP. The client has to encrypt the challenge to prove that it has the right key. The AP will then try to decrypt using its own key. If successful, the client will be allowed to continue with Association. Shared authentication is much less common than open authentication, and the broadcasting AP doesn't advertise it. For this reason, many clients will try open authentication first. If they get denied one or more times, they will try shared authentication.
+
+The connection process for WEP is similar to Open network, the only difference is that *Privacy* bit is set in the beacons, probe response, and association frames.The *privacy* bit indicates encryption. Because of the lack of WPA or WPA2 tags in these frames, we also know that the security algorithm is WEP. 
+
+#### EAPOL
+
+EAPOL frames are most commonly used during the handshake when connecting to an AP with WPA, WPA2 and WPA3 or OWE. It stands for Extensible Authentication Protocol (EAP) over LAN. We will also encounter them during a WPS exchange, or when Protected Management Frames (PMF), 802.11w, is used in the network.
+
+Understanding the structure of EAPOL frames is important:
+
+![[Pasted image 20241213211059.png]]
+
+The authentication section of the EAPOL frame is divided into several fields:
+
+* *The Protocol Version* (1 byte)  has a value of 1,2, or 3. These values represent 802.1X-2001, 802.1X-2004, or 802.1X-2010 respectively. Values of 1 and 2 are the most common.
+* *The Packet Type* (1 byte) usually has a value of 3, which means it is a key.
+* The *Packet Body Length* - fields 2 bytes indicates the packet body length or the amount of data after this field.
+* The *Descriptor Type* (1 byte) usually has a value of either 2, which indicates "EAPOL RSN Key" when WPA 2 is in use, or 254, which indicates "EAPOL WPA Key" when WPA1 is in use.
+* The *Key Information* (2 bytes) specifies the characteristics of the key, which is divided in smaller parts.
+* The *Key Length* (2 bytes) gives us the length of the PTK. A value of 5 or 13 indicates WEP40 or WEP104, and the values of 16 or 32 indicates TKIP, CCMP, GCMP, BIP-CMAC, or BIP-GMAC cipher.
+* The *Replay Counter* (8 bytes) is increased incrementally each time EAPOL frames travel back and forth. This helps to avoid replaying old messages. The replay counter is usually 1 in the first part of the handshake (frame 1 and 2) and 2 in the second part. In cases when the exchange fails, because of an incorrect key or a weak signal, the number will go higher. 
+* The *Key Nonce* (32 bytes) contains a nonce from the transmitter
+* The *EAPOL Key IV* (16 bytes) contains the IV used with the KEK. When it's not required, this field will contain a 0.
+* The *Key Receive Sequence Counter* (8 bytes) is used in messages 3 and 4, to indicate the counter for the GTK. It is not used with WEP, but does have a few other uses. 
+* The *Key Identifier* is unused field, reserved for future use. It is set to 0.
+* The *Key MIC* (variable size) is the MIC of this packet, called EAPoL-Key from and including Protocol version. Its size will depend on the AKM used.
+* The *Key Data Length* field (2 bytes) defines the length of the upcoming Key Data field
+* The *Key Data* field includes additional data for the key exchange. The data may also be one or more Robust Security Network Elements (RSNE) or Key Data Elements (KDE). An RSNE starts with 0x30 and KDE starts with 0xdd
+
+The key information field is further divided into a number of smaller fields.
+
+- By default, the _Key descriptor version_ (bits 0, 1 and 2) is set to 0, but could also be set to values of 1, 2, or 3 to indicate a specific algorithm. The values of 1, 2, and 3 are mappings to algorithms used for the MIC, its length, and the encryption key. One (1) is for ARC4 encryption with HMAC-MD5, two (2) is for NIST AES key wrap with HMAC-SHA1-128, and three (3) is NIST AES key wrap with AES-128-CMAC.
+- When the _Key Type_ (bit 3) is set, the result is going to be a PTK. When not set, the result is going to be a group key or SMK.
+- Bits 4 and 5 are reserved and not in use at this time.
+- If _Install_ (bit 6) is set, the client will need to install the keys.
+- _Key ACK_ (bit 7) indicates whether or not the receiving party expects an EAPoL-Key message.
+- When _Key MIC_ (bit 8) is set, a MIC is present.
+- _Secure_ (bit 9) is set when the initial key exchange is complete. It will be set in message 3 (from the Authenticator to Supplicant) and in message 4 (from the Supplicant to Authenticator).
+- _Error_ (bit 10) is set when a MIC failure happens.
+- _Request_ (bit 11) is only set by a Supplicant in a MIC Failure report. It can also requests the Authenticator to initiate a 4-way handshake or group key handshake.
+- The _Encrypted Key Data_ (bit 12) is set if the Key Data field is encrypted.
+- _SMK Message_ (bit 13) specifies if the packet is part of a SMK handshake.
+
+_Key Data_ can contain two types of data: key data cryptographic encapsulation(s) (KDE) or RSNE. The structure of KDE is as follows.
+
+![[Pasted image 20241213234859.png]]
+
+The RSNE structure is a bit more complex.
+
+![[Pasted image 20241213235125.png]]
+
+
+The last element will only be present if the one before it is also present. The Pairwise Cipher Suite List contains items in the following format
+
+![[Pasted image 20241213235239.png]]
+
+##### WPA1
