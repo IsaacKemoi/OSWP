@@ -3324,3 +3324,105 @@ From there, they can both derive the same PMK for use in the 4-way handshake lik
 
 We explore a successful WPS exchange. It has duplicate frames (frames with the retry bit set) because some frames were not acknowledged by the receiving device. When the ACK is not received within a specific amount of time, the frame it is supposed to acknowledge is assumed lost. The transmitter sends it again, however, this time the retry bit is set.
 
+Below is a beacon frame with the WPS tag.
+
+![[Pasted image 20241216184911.png]]
+
+After the probe request from the client, the response from the AP, as well as the authentication and the association to the AP. 
+
+![[Pasted image 20241216185101.png]]
+
+The next includes the *EAP Start* from the client.
+![[Pasted image 20241216185603.png]]
+
+The next frame includes the *EAP Request Identity* from the AP.
+
+![[Pasted image 20241216185831.png]]
+
+After several retried frames, the identity response (with _WFA-SimpleConfig-Enrollee-1-0_) is frame 28.
+
+![[Pasted image 20241216192546.png]]
+
+Because of the retried EAP Response Identity, the request with _WSC Start_ appears in frame 26, before the response.
+
+![[Pasted image 20241216192616.png]]
+
+The AP and the client will now exchange a series of eight messages called M1 to M8, sent in a sequential order, back and forth, to confirm the WPS PIN and securely exchange the passphrase, in M8. M1 includes information from the enrollee, and M2 will add registrar information. In WPS, the Registrar is an entity, not necessarily an AP, that can give access to the network. An enrollee is a device, most often either an AP or a client, looking to get the passphrase for the network. M1 (and M2 in a smaller measure) will help determine which is which.
+
+Frame 30 shows M1 with detailed information about the enrollee, which includes the manufacturer of the wireless adapter (Atheros), the name of the device (WXP-JBRAEUER-T1), and the device password ID used. This last bit of information indicates, the type of password used (0000, default value), which indicates a PIN. Also included are the MAC address, nonce and public key (DH).
+
+![[Pasted image 20241216192850.png]]
+
+Frame 38 shows M2 with information about the AP, a D-Link DIR-655 Model A1/A2. This frame also contains both the Enrollee and Registrar nonce as well as the public key (DH) of the Registrar.
+
+![[Pasted image 20241216193005.png]]
+
+Frame 42 below shows M3, which has been re-transmitted a few times (39, 40, 41, and 42) with the Registrar nonce and both _E-Hash_ values (from the enrollee and the registrar).
+
+![[Pasted image 20241216193331.png]]
+
+Frame 43 below is M4 type with _R-S1_ encryption settings.
+
+![[Pasted image 20241216193410.png]]
+
+The first half of the PIN has been validated.
+
+Frame 44 is M5 type with _E-S1_ encryption settings. The second part of the PIN will be verified in the next few messages.
+
+![[Pasted image 20241216193612.png]]
+
+Frame 45 is M6 type with _R-S2_ encryption settings.
+
+![[Pasted image 20241216193715.png]]
+
+Frame 46 is M7 type with _E-S2_ encryption settings.
+
+![[Pasted image 20241216193756.png]]
+
+Frame 47 below is M8 type with encrypted wireless settings for the Enrollee.
+
+![[Pasted image 20241216193826.png]]
+
+_WSC Done_ in frame 48 indicates the WPS (Wi-Fi Simple Configuration) exchange is finished.
+
+![[Pasted image 20241216193851.png]]
+
+Frame 49 below shows EAP Failure to indicate the end of the registration protocol session, so now the client can now use the credentials to do the 4-way handshake:
+
+![[Pasted image 20241216194013.png]]
+
+#### 802.11w
+This capture file shows the SA Query mechanism in action when 802.11w is negotiated by a client.
+
+The first frame is a beacon. We notice that WPA2 CCMP is being used in the RSN IE (for both unicast and multicast frames). The Authentication Key Management (AKM) shows that pre-shared Key (PSK) is used. By default, SHA1 is used when Wireshark doesn't specify anything (AKM type with a value of 2), but in this case, 802.11w uses SHA256 (AKM type with a value of 6).
+
+When _RSN Capabilities_ are expanded, only the "Management Frame Protection Capable" bit is set, and thus the AP can accept clients with and without 802.11w.
+
+![[Pasted image 20241216194339.png]]
+
+The following few frames include several Probe Requests, in which the client is scanning for APs. Frame 3 shows a response from the AP with similar information as in the Beacon described in Figure 110.
+
+![[Pasted image 20241216194359.png]]
+
+Authentication starts at frame 50. The AP responds with frame 51, and the client then associates to the AP in frames 52 and 53. In frame 52, the association request, the client indicates it supports the AKM requested by the AP as well as PMF. With these settings, the client will only associate to an AP that either is set to "Capable" or "Required".
+
+![[Pasted image 20241216194526.png]]
+
+The 4-way handshake is similar to any other WPA2 handshake.
+
+Frame 132 is a deauthentication sent by an attacker. It is followed by two action frames and then more deauthentication frames. This could be a containment from a Wireless Intrusion Prevention System (WIPS), but in this case it is deauthentication attack from aireplay-ng.
+
+![[Pasted image 20241216194807.png]]
+
+The first action frame (Figure 114) is an encrypted SA Query from the client, checking on the AP.
+
+![[Pasted image 20241216194855.png]]
+
+The AP responds immediately in frame 134. As a result, the AP will ignore deauthentications that do not come directly from the client.
+
+![[Pasted image 20241216194914.png]]
+
+Finally, the client sends a deauthentication frame when disconnecting from the network so the AP can free resources associated to the client's connection.
+
+![[Pasted image 20241216194942.png]]
+
