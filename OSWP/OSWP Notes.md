@@ -3170,3 +3170,157 @@ The last element will only be present if the one before it is also present. The 
 ![[Pasted image 20241213235239.png]]
 
 ##### WPA1
+
+
+#### WPA2
+
+The first frame is a beacon from the AP, which advertises WPA1 and WPA2, both with AES/CCMP and TKIP. Group cipher in both cases is TKIP, which means that all frames that are broadcast or multicast will be encrypted using TKIP. The unicast ones will depend on the cipher selected by the client. 
+
+Below shows beacons with RSN IE.
+
+![[Pasted image 20241216143906.png]]
+
+The below shows beacon with WPA IE:
+![[Pasted image 20241216144015.png]]
+
+In the association request (frame 82), the client selected WPA2 with AES or RSN as well as TKIP for the Group cipher. 
+
+![[Pasted image 20241216145507.png]]
+
+The AP responds with a successful Association Response (frame 84), and then proceeds to start the 4-way handshake.
+
+![[Pasted image 20241216145611.png]]
+
+This 4-way handshake is similar to the one in the WPA1 section. There are a few key differences because it is WPA2 CCMP.
+
+In this first EAPoL message, the key information indicates it's using CCMP with HMAC-SHA1 MIC.
+
+![[Pasted image 20241216145651.png]]
+
+The WPA Data field shows an RSNE with a PMKID
+
+![[Pasted image 20241216145829.png]]
+
+We note an RSNE in the WPA Key Data field, showing details of the cipher used.
+
+![[Pasted image 20241216150349.png]]
+
+This third message likely contains the GTK in the Key Data field. We suspect this is the case because when we decrypt the capture we notice there is no GTK handshake afterward. The data field would also contain the IGTK if 802.1w was negotiated.
+
+![[Pasted image 20241216150540.png]]
+
+Finally, the last EAPoL indicates the client has installed the keys, and the AP can now do it as well, to encrypt the traffic.
+
+![[Pasted image 20241216150804.png]]
+
+#### WPA3
+
+We need to understand a WPA3 dragonfly handshake followed by a 4-way handshake.
+
+The first frame is a beacon from the AP, advertising the ESSID  "WPA3-Network", SAE in the RSN IE, and 802.11w (which is mandatory for WPA3).
+
+![[Pasted image 20241216164113.png]]
+
+The second frame is a probe request and the third is a response to that request. It contains the same IEs as the beacon and advertises SAE, 802.11w, and BIP in the RSN IE. There is one exception, the Traffic Indication Map.
+
+![[Pasted image 20241216164127.png]]
+
+The dragonfly handshake occurs during authentication part. In the first authentication frame (5), we note that the algorithm isn't "Open authentication" like it was with WEP, WPA1, or WPA2. Now the algorithm is Simultaneous Authentication of Equals (SAE) using the default group, 19. This first authentication frame is the start of the commit phase where both sides commit to a shared secret.
+
+![[Pasted image 20241216165042.png]]
+The second frame (7) of the authentication stage is where the AP sends its scalar and finite field element.
+
+![[Pasted image 20241216165120.png]]
+
+This next frame (9) is the confirm message from the client.
+
+![[Pasted image 20241216165154.png]]
+
+And finally, in frame 11, there is an answer from the AP.
+
+![[Pasted image 20241216165205.png]]
+
+The association phase, which comes next, is uneventful. First the client indicates the specifics of the RSNA, including AES for unicast and multicast, SAE, and 802.11w.
+
+![[Pasted image 20241216165444.png]]
+
+
+Next, the AP sends the association response, accepting it.
+
+![[Pasted image 20241216165502.png]]
+
+The association stage concludes with the 4-way handshake, which uses AES/CCMP.
+
+![[Pasted image 20241216170437.png]]
+
+***Disagreeing on Group***
+
+In most cases, a client and an AP will settle on the default group, 19. However, it is possible to configure groups on the AP and the client. In this section we'll explore a PCAP in which the client has a custom selection of groups that is different than what the AP would normally accept. The client will will go through the groups one by one until it finds one the AP can agree on.
+
+The first frame is a beacon from the AP, advertising "WPA3-Network" with SAE and mandatory 802.11w.
+
+![[Pasted image 20241216171716.png]]
+
+The third frame is a response to the probe request with the same information as in the beacon.
+
+![[Pasted image 20241216171728.png]]
+
+The authentication for the dragonfly handshake starts at frame 51 where the client tries using group 15.
+
+![[Pasted image 20241216171805.png]]
+
+![[Pasted image 20241216171823.png]]
+
+Next, the client tries again. This time with group 16.
+
+![[Pasted image 20241216171859.png]]
+
+The AP rejects this one as well.
+
+![[Pasted image 20241216171911.png]]
+
+Next, the client tries group 19.
+
+![[Pasted image 20241216171922.png]]
+
+Group 19 is the default group and is required in any implementation, so it will always be accepted.
+
+![[Pasted image 20241216171941.png]]
+
+Now the client proceeds to the confirm phase.
+
+![[Pasted image 20241216171957.png]]
+
+The following frame from the AP concludes the authentication phase, which is successful, as indicated by the status code.
+
+![[Pasted image 20241216172013.png]]
+
+From here, the client will associate to the AP and complete the 4-way handshake.
+
+#### Opportunistic Wireless Encryption
+Frame 1 below shows a beacon with a RSN tag offering OWE only.
+
+![[Pasted image 20241216172341.png]]
+Like WPA3, OWE requires 802.11w. This protects some management frames that are susceptible to attacks.
+
+The following figure contains a client probe that also has an RSN IE with OWE, and 802.11w.
+
+![[Pasted image 20241216172856.png]]
+
+The open authentication, with frames 51 and 52 from the client and the AP respectively, is uneventful. Whereas WPA3 used the authentication for the dragonfly handshake, OWE does public key exchange in the association phase. The association request from the client is in frame 55.
+
+![[Pasted image 20241216173103.png]]
+
+The last IE in the association request is an extended IE, which contains the Diffie-Hellman parameters from the client. These include the Diffie-Hellman group used, default group 19, and the public key.
+
+In the following frame, the AP sends its information as well.
+
+![[Pasted image 20241216173125.png]]
+
+From there, they can both derive the same PMK for use in the 4-way handshake like in WPA2, in frame 59, 61, 63, and 65.
+
+
+#### Wi-Fi Protected Setup
+
+We explore a successful WPS exchange. It has duplicate frames (frames with the retry bit set) because some frames were not acknowledged by the receiving device. When the ACK is not received within a specific amount of time, the frame it is supposed to acknowledge is assumed lost. The transmitter sends it again, however, this time the retry bit is set.
+
