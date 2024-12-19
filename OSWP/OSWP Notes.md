@@ -3426,3 +3426,585 @@ Finally, the client sends a deauthentication frame when disconnecting from the n
 
 ![[Pasted image 20241216194942.png]]
 
+
+## Aircrack-ng Essentials
+
+Aircrack-ng is a suite of tools that are used for attacking and auditing wireless networks. Among them are a packet sniffer, a network detector, a frame injection tool, and a tool to crack WEP keys and WPA-PSK passphrases.
+
+### Airmon-ng
+
+This tool places our interfaces in and out of monitor mode. It is a convenient way to enable and disabled monitor mode on various wireless interfaces.
+
+Running airmon-ng without any parameters displays the status and information about the wireless interfaces on the system.
+
+```
+kali@kali:~$ sudo airmon-ng
+```
+
+Our Airmon-ng output refers to the PHY identifier for the wireless interface, followed by the interface name, the driver, and finally the chipset. The interfaces are typically named "wlan" followed by one or two digits.
+
+#### Airmon-ng Check
+
+Some processes, many of which start automatically, are known to interfere with the tools in the Aircrack-ng suite and other tools using interfaces in monitor mode. For example, _Network Manager_ will put a wireless interface back into managed mode and hop on different channels scanning for networks.
+
+It will be important to identify and terminate processes like Network Manager. The Airmon-ng check parameter checks for, and lists, these processes.
+
+```
+kali@kali:~$ sudo airmon-ng check
+
+Found 3 processes that could cause trouble.
+Kill them using 'airmon-ng check kill' before putting
+the card in monitor mode, they will interfere by changing channels
+and sometimes putting the interface back in managed mode
+
+   PID Name
+  1885 NetworkManager
+  1955 wpa_supplicant
+  2015 dhclient
+```
+
+The output indicates our system is running Network Manager, WPA Supplicant, and DHCP client.
+
+Airmon-ng with the check kill parameter first tries to stop known services gracefully then kills the rest of the processes:
+
+If Internet access is needed, it should be configured manually after putting the interface in monitor mode using tools such as _dhclient_ and/or _wpa_supplicant_ on another interface. If access point mode is required, it should be manually configured as well using _hostapd_.
+
+#### Airmon-ng Start
+To place our wireless interface in monitor mode we execute airmon-ng with "start" option.
+
+```
+sudo airmon-ng start wlan0
+```
+
+To start monitor mode on a specific channel, we add the channel number to our previous command.
+
+```
+sudo airmon-ng start wlan0 3
+```
+
+
+This is important if the tool we use after airmon-ng doesn't have the ability to set the channel. For example aireplay-ng. In most cases, however we will run Airodump-ng before Aireplay-ng in which case the channel will be set by Airodump-ng.
+
+To check on which channel monitor was started on, we can use *iw*
+
+```
+sudo iw dev wlan0mon info
+```
+
+We could also iwconfig, but it is deprecated.
+
+**Airmon-ng verbose and debug options**
+
+Verbose and debug options in airmon-ng output detailed information about the system and the installed wireless card. This information is useful for debugging.
+
+The --verbose option outputs release information from lsb_release -a, kernel information from uname -a, virtual machine detection, and details about connected interfaces.
+
+```
+└─$ sudo airmon-ng --verbose
+
+Distributor ID: Kali
+Description:    Kali GNU/Linux Rolling
+Release:        2024.4
+Codename:       kali-rolling
+
+Linux kali 6.11.2-amd64 #1 SMP PREEMPT_DYNAMIC Kali 6.11.2-1kali1 (2024-10-15) x86_64 GNU/Linux
+Regulatory Domain appears to be unset, please consider setting it with 'iw reg set XX'
+https://wireless.wiki.kernel.org/en/users/documentation/iw#updating_your_regulatory_domain
+Detected VM using dmi_info
+This appears to be a Qemu/KVM Virtual Machine
+If your system supports VT-d, it may be possible to use PCI devices
+If your system does not support VT-d, you can only use USB wifi cards
+
+K indicates driver is from 6.11.2-amd64
+V indicates driver comes directly from the vendor, almost certainly a bad thing
+S indicates driver comes from the staging tree, these drivers are meant for reference not actual use, BEWARE
+? indicates we do not know where the driver comes from... report this
+
+
+X[PHY]Interface         Driver[Stack]-FirmwareRev               Chipset                                                                         Extended Info
+
+?[phy0]wlan0            88XXau[mac80211]-unavailable            Realtek Semiconductor Corp. RTL8812AU 802.11a/b/g/n/ac 2T2R DB WLAN Adapter     mode managed
+
+```
+
+In comparison, the output with *--debug* provides slightly more details derived from system commands.
+
+```
+kali@kali:~$ sudo airmon-ng --debug
+
+/bin/sh -> /usr/bin/dash
+
+SHELL is GNU bash, version 5.0.3(1)-release (x86_64-pc-linux-gnu)
+Copyright (C) 2019 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+
+This is free software; you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+
+No LSB modules are available.
+Distributor ID:	Kali
+Description:	Kali GNU/Linux Rolling
+Release:	2019.3
+Codename:	kali-rolling
+
+Linux kali 4.19.0-kali5-amd64 #1 SMP Debian 4.19.37-6kali1 (2019-07-22) x86_64 GNU/Linux
+Detected VM using lspci
+This appears to be a VMware Virtual Machine
+If your system supports VT-d, it may be possible to use PCI devices
+If your system does not support VT-d, you can only use USB wifi cards
+
+K indicates driver is from 4.19.0-kali5-amd64
+V indicates driver comes directly from the vendor, almost certainly a bad thing
+S indicates driver comes from the staging tree, these drivers are meant for reference not actual use, BEWARE
+? indicates we do not know where the driver comes from... report this
+
+
+X[PHY]Interface		Driver[Stack]-FirmwareRev		Chipset										Extended Info
+
+getStack mac80211
+getBus usb
+getdriver() ath9k_htc
+getchipset() Qualcomm Atheros Communications AR9271 802.11n
+BUS = usb
+BUSINFO = 0CF3:9271
+DEVICEID = 
+getFrom() K
+getFirmware 1.4	
+K[phy0]wlan0		ath9k_htc[mac80211]-1.4			Qualcomm Atheros Communications AR9271 802.11n					mode managed
+```
+
+### Airmon-ng Stop
+
+To disable monitor mode, we use the stop option followed by the monitor mode interface name.
+
+```
+kali@kali:~$ sudo airmon-ng stop wlan0mon
+
+PHY	Interface	Driver		Chipset
+
+phy0	wlan0mon	ath9k_htc	Atheros Communications, Inc. AR9271 802.11n
+
+		(mac80211 station mode vif enabled on [phy0]wlan0)
+
+		(mac80211 monitor mode vif disabled for [phy0]wlan0mon)
+```
+
+### Airodump-ng
+
+Airodump-ng is used to capture raw 802.11 frames and is particularly suitable for collecting WEP initialization vectors (IVs) or WPA/WPA2 handshakes, which we'll use with aircrack-ng or other 802.11 cracking tools. Airodump-ng offers the ability to export the files in various formats. This allows us to create custom scripts and makes integration with other tools, including GUIs, easier. For example, with a connected GPS receiver, Airodump-ng can correlate location data with detected APs and stations. 
+
+This GPS data can then be imported into a database to provide a graphical representation using online maps.
+
+#### Airodump-ng Usage
+
+Airodump-ng has many filtering and capture options. We can display them by executing airodump-ng without parameters
+
+```
+sudo airodump-ng
+```
+
+The options we will mostly use if saving to a file, filtering by BSSID, and capturing on a specific channel.
+
+| Option        | Description                                                 |
+| ------------- | ----------------------------------------------------------- |
+| -w prefix     | Saves the capture dump to the specified filename            |
+| --bssid BSSID | Filters Airodump-ng to only capture the specified BSSID     |
+| -c channel(s) | Forces Airodump-ng to only capture the specified channel(s) |
+
+##### Sniffing with Airodump-ng
+With our wireless interface in monitor mode, we initiate our first sniffing session with airodump-ng, the interface name, and the *-c* option to only capture on channel 2.
+
+```
+sudo airodump-ng wlan0mon -c 2
+```
+
+*Airodump-ng Fields*
+
+Airodump-ng presents a great deal of information while it is running its capture. The output is separated into two separate sections. The top section provides information about detected APs along with the encryption, network names etc. The lower section provides information about stations sending frames and the associated APs.
+
+
+```
+CH  2 ][ Elapsed: 12 s ][ 2011-11-06 13:31 ][ WPA handshake: C8:BC:C8:FE:D9:65                                         
+
+ BSSID              PWR RXQ  Beacons    #Data, #/s  CH  MB   ENC  CIPHER AUTH ESSID
+
+ C8:BC:C8:FE:D9:65  -23  87      579       69    1   2  54e. WPA2 CCMP   PSK  secnet
+ 34:08:04:09:3D:38  -30   0      638       24    0   3  54e  OPN              wifu
+ 00:18:E7:ED:E9:69  -84  10      104        0    0   3  54e. OPN              dlink        
+
+ BSSID              STATION            PWR   Rate    Lost  Packets  Probes        
+
+ C8:BC:C8:FE:D9:65  0C:60:76:57:49:3F  -69    0 - 1      0       35  secnet
+ 34:08:04:09:3D:38  00:18:4D:1D:A8:1F  -26   54 -54      0       31  wifu
+ 30:46:9A:FE:79:B7  30:46:9A:FE:69:BE  -73    0 - 1      0        1
+```
+
+The top line display, we can also tell if a WPA handshake has been captured and the associated BSSID. Capturing a WPA handshake is our ultimate goal with this utility. 
+
+The table below contains a description of all of all of the airodump-ng fields where APs are displayed.
+
+| Field   | Description                                                                                                                                                                                                                      |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BSSID   | The MAC address of the AP                                                                                                                                                                                                        |
+| PWR     | The signal level reported by the card, which will get higher as we get closer to the AP or station                                                                                                                               |
+| RXQ     | Receive Quality as measured by the percentage of frames successfully received over the last 10 seconds                                                                                                                           |
+| Beacons | Number of announcement frames sent by the AP                                                                                                                                                                                     |
+| # Data  | Number of captured data packets (if WEP, this is the unique IV count), including data broadcast packets                                                                                                                          |
+| \#/s    | Number of data packets per second measured over the last 10 seconds                                                                                                                                                              |
+| CH      | Channel number taken from beacon frames. Note that sometimes frames from other channels are captured due to overlapping channels                                                                                                 |
+| MB      | Maximum speed supported by the AP. 11=802.11b, 22=802.11b+, up to 54 is 802.11g and anything higher is 802.11n or 802.11ac                                                                                                       |
+| ENC     | Encryption algorithm in use. OPN=no encryption, "WEP?"=WEP or higher (not enough data to choose between WEP and WPA/WPA2), WEP=static or dynamic WEP, and WPA or WPA2 if TKIP or CCMP is present. WPA3 and OWE both require CCMP |
+| CIPHER  | The cipher detected: CCMP, WRAP, TKIP, WEP, WEP40, or WEP104                                                                                                                                                                     |
+| AUTH    | The authentication protocol used. One of MGT (WPA/WPA2/WPA3 Enterprise), SKA (WEP shared key), PSK (WPA/WPA2/WPA3 pre shared key), or OPN (WEP open authentication)                                                              |
+| ESSID   | The so-called SSID, which can be empty if the SSID is hidden                                                                                                                                                                     |
+
+In the lower station output, Airodump-ng presents a list of devices. Unless specified in the options, any station sending frame(s) is listed in the STATION column. If the stations are connected to an AP, the BSSID is displayed. If not the field will show "(not associated)".
+
+The table below contains descriptions of all the Airodump-ng fields in the bottom section, where all the stations, associated and unassociated, are displayed.
+
+| Field   | Description                                                                      |
+| ------- | -------------------------------------------------------------------------------- |
+| BSSID   | The MAC address of the AP                                                        |
+| STATION | The MAC address of each associated station                                       |
+| Rate    | Station's receive rate, followed by transmit rate                                |
+| Lost    | Number of data frames lost over the last 10 seconds based on the sequence number |
+| Packets | Number of data packets sent by the client                                        |
+| Probes  | The ESSIDs probed by the client                                                  |
+
+**RXQ** field - Receive Quality is a measure over all management and data frames. For example, let's say we start our capture at 100% RXQ. Then the RXQ drops to below 90% even though we are still capturing all sent beacons. From this, we can deduce that the AP is sending frames to a client, but we can't "hear" the client or the AP sending data to the client. The solution is to physically move closer to the AP.
+
+Note that the RXQ column will only be displayed when we are locked onto a single channel. It won't be visible while we are channel hopping.
+
+**Lost** field measures the lost data frames originating from the station. To determine the number of fra. mes lost, Airodump-ng measures the sequence field of every non-control frame.
+
+There are a number of possible reasons for lost frames:
+
+1. First and foremost we can't send and "listen" to the network, at the same time. Every time we send data, we can't "hear" the frames being transmitted for that interval.
+2. Physical location in relation to the AP - Too far away we might miss the frames because the signal is too weak. Too close we might miss frames because of the signal being too strong. We also need to be aware of other interference such as bluetooth, microwave etc. In less common scenarios, we may need to relocate our device if the AP is *beamsteering*, which steers the beam in a specific direction. 
+3. Limitations of our Wireless card. If for example, it isn't capable of decoding certain modulations, we could run into problems. This would be the case if we are using a wireless card to capture packet that was 802.11n, while the wireless card was 802.11ac. We will also have issues if our wireless card isn't capable of decoding due to the number of streams. For example, the Alfa AWUS036NHA is a 1-stream device and it cannot decode anything more than a 1-stream transmission.
+4. Finally, it's worth mentioning that we might miss frames because a station scanning for APs will hop onto different channels.
+
+To minimize the number of lost frame, we can try changing the physical location of our device, the type of antennae we are using, the channel, the data rate, or the injection rate. Any one or more of these may prove useful.
+
+#### Precision Sniffing
+If we are in an area with too many APs, our airodump-ng display and capture files will become very cluttered with unwanted data. As part of our initial reconnaissance we will want to determine the BSSID of the target AP and its channel so that we can focus on it specifically. 
+
+To sniff data on a specific AP on a given channel we add the *--bssid* option and the BSSID of the BSSID to our Airodump-ng command. We output the data to cap1 files with *-w* option.
+
+```
+sudo airodump-ng -c 3 --bssid 34:08:04:09:3D:38 -w cap1 wlan0mon
+```
+
+
+#### Airodump-ng Output Files
+
+By default using *-w* option outputs to a number of formats.
+
+* PCAP with a cap extension
+* CSV with a csv extension
+* Kismet legacy CSV, with a kismet.csv extension
+* Kismet legacy NetXML, with a kismet.netxml extension
+* Log CSV, with a log.csv extension.
+
+![[Pasted image 20241217114949.png]]
+
+Two additional files are created with certain options:
+
+- GPS coordinates, with a gps extension when the -g option and a GPS device is configured. More details about this feature in a later section.
+- Initialization Vector (IVS), with a .ivs extension with the --ivs option. In this case, only the IVS file will be created. This option is only useful for WEP cracking.
+
+To limit which file formats are generated, we can use the *--output-format* option followed by a comma separated list of file formats. For example:
+
+```
+sudo airodump-ng --output-format csv,pcap wlan0
+```
+
+These output files makes scripting attacks much easier. In addition, there are a number of tools that can use these files to display information found by airodump-ng. Some of the tools that can work with these outputs are:
+
+* Fern WiFi cracker
+* WiFite
+
+These are both GUI for Aircrack-ng.
+
+* GISKismet maps APs using Google Earth
+* Airgraph-ng, which is a graphic tool
+
+
+Resources:
+1. (Savio code, 2021), [https://github.com/savio-code/fern-wifi-cracker](https://github.com/savio-code/fern-wifi-cracker) [↩︎](https://portal.offsec.com/courses/pen-210-9545/learning/aircrack-ng-essentials-15808/airodump-ng-15862/airodump-ng-output-files-15944#fnref-local_id_10-1)
+2. (kimocoder, 2020), [https://github.com/kimocoder/wifite2](https://github.com/kimocoder/wifite2) [↩︎](https://portal.offsec.com/courses/pen-210-9545/learning/aircrack-ng-essentials-15808/airodump-ng-15862/airodump-ng-output-files-15944#fnref-local_id_10-2)
+3. (Joshua D. Abraham, 2016), [https://github.com/xtr4nge/giskismet](https://github.com/xtr4nge/giskismet) [↩︎](https://portal.offsec.com/courses/pen-210-9545/learning/aircrack-ng-essentials-15808/airodump-ng-15862/airodump-ng-output-files-15944#fnref-local_id_10-3)
+4. (Aircrack-ng, 2018), [https://www.aircrack-ng.org/doku.php?id=airgraph-ng](https://www.aircrack-ng.org/doku.php?id=airgraph-ng) [↩︎](https://portal.offsec.com/courses/pen-210-9545/learning/aircrack-ng-essentials-15808/airodump-ng-15862/airodump-ng-output-files-15944#fnref-local_id_10-4)
+
+
+#### Airodump-ng Interactive Mode
+
+We can also interact with the information displayed while running. Airodump-ng acknowledges key presses on the top right. 
+
+One of the most useful keys is T, which allows us to freeze the output when we notice something useful on the screen. Only the GUI is frozen, and the capture continues in the background. Pressing T again will refresh the screen and the live data display resumes.
+
+AP and client coloring is another useful feature. Pressing A enables and disables scrolling through the AP list. When scrolling is enabled we can go up and down with the J and L keys. As we scroll through the APs, we may notice the associated stations are highlighted. The m key cycles through the color options for a selected AP.
+
+The a key cycles through different displays options.
+
+- APs and stations (default)
+- APs and stations plus ACK statistics (note: some wireless drivers don't provide control frames to user space)
+- APs only
+- Stations only
+
+The s key cycles through different sorting options:
+
+- Amount of beacons
+- Amount of data packets
+- Packet rate
+- Channel
+- Max data rate
+- Encryption
+- Cipher
+- Authentication
+- ESSID
+- First seen
+- BSSID
+- Power level
+
+The i key will invert the sorting and d resets to the default sorting (by power level).
+
+#### Airodump-ng Troubleshooting
+
+We might encounter a few issues while using Airdump-ng.
+
+**No APs or Clients are Shown**
+We should first confirm that there are APs on the current channel. We can make sure that our card works in managed mode. If we still can't see any APs we can try unloading the driver with *rmmod* and reloading it with *modprobe*. Finally we can check *dmesg* for errors.
+
+**Little or No Data Being Captured**
+We can starting making sure that we set the *-c* option, because if this is not set Airodump-ng will hop between different channels. We might also need to consider our physical location in relation to the AP. Next, we can check that we start our wireless card in monitor mode and that there is no network manager causing interferences. 
+
+**Airodump-ng Stops Capturing After a Short Period of Time**
+The most common cause of this is that the Network Manager is running and taking the card out of Monitor Mode. We'll need to kill any of these services using airmon-ng check kill.
+
+Another possibility is firmware issues.  The firmware, being a piece of compiled code, may crash, which would interrupt the capture process. Such issues will typically be logged in dmesg.
+
+**SSIDs Displayed as "<length: ?>"** 
+
+At times, we might see "<length: ?>" as the SSID on the Airodump-ng display. The "?" is normally the length of the hidden SSID. For example, if the SSID was test123 then it would show up as "<length: 7>" where 7 is the number of characters. When the length is 0 or 1, the AP will not reveal the actual length. A "?" indicates a wireless frame contained a new BSSID. In these cases, it may be the case that a wireless device is communicating with an AP too far away for us to hear.
+
+**Fixed channel" Error Message**
+
+
+If we, for example, set the channel to channel 6 with the -c option, we might encounter an error message similar to the one found here.
+
+```
+ CH  6 ][ Elapsed: 28 s ][ 2015-10-21 16:29 ][ fixed channel wlan0mon: 1
+```
+
+> Listing 15 - Fixed channel message
+
+When we receive this error, we know that some other process is changing to channel 1 or that some process is channel scanning.
+
+We need to eliminate the root cause and restart Airodump-ng. The problem is most likely the result of network managers and other interfering processes that are running. If this is the case, we can resolve the issue by killing the network managers with airmon-ng check kill.
+
+This error message might also mean that we cannot use this channel (and Airodump-ng failed to set the channel). For example, if we
+
+
+**No Output Files**
+
+We ran Airodump-ng and now cannot find the output files.
+
+First, we'll want to make sure we ran airodump-ng with the option to create output files with -w or --write and the filename prefix. Without this option, Airodump-ng won't create output files.
+
+By default, the output files are placed in the directory where Airodump-ng is run. Before starting Airodump-ng, we can use pwd to display the current directory. We'll make a note of this directory so we can return to it later.
+
+To output the files to a different directory, we'll want to add the full path to the file prefix name. For example, to output files to /tmp we'll use -w /tmp/\<file prefix>.
+
+### Aireplay-ng
+
+Aireplay-ng is primarily used for generating wireless traffic. We'll use it with Aircrack-ng to crack WEP keys and WPA-PSK passphrases. Aireplay-ng also supports various attacks such as deauthentication (Which helps in capturing 4-way WPA handshake), fake authentication, interactive packet replay and more.
+
+Aireplay-ng supports the following attacks.
+
+|Attack #|Attack Name|
+|---|---|
+|0|Deauthentication|
+|1|Fake Authentication|
+|2|Interactive Packet Replay|
+|3|ARP Request Replay Attack|
+|4|KoreK ChopChop Attack|
+|5|Fragmentation Attack|
+|6|Café-Latte Attack|
+|7|Client-Oriented Fragmentation Attack|
+|8|WPA Migration Mode Attack|
+|9|Injection Test|
+
+Majority of these attacks are specific to WEP networks. We want to focus on the Aireplay-ng options relevant to WPA attacks, 0 for deauthentication attacks, and 9 for the injection test.
+
+#### Aireplay-ng Replay Options
+When replaying (injecting) packets, we have a number of packets of options we can apply. Not all option is relevant for every attack. We should consult the specific attack documentation (https://aircrack-ng.org/doku.php?id=deauthentication) to determine which options should be used. Table below provides a list of all available options:
+
+| Option    | Description                             |
+| --------- | --------------------------------------- |
+| -x nbpps  | Number of packets per second            |
+| -p fctrl  | Set frame control word (hex)            |
+| -a bssid  | Access point MAC address                |
+| -c dmac   | Destination MAC address                 |
+| -h smac   | Source MAC address                      |
+| -e essid  | Target AP SSID                          |
+| -j        | arpreplay attack: inject FromDS packets |
+| -g value  | Change ring buffer size (default: 8)    |
+| -k IP     | Destination IP in fragments             |
+| -l IP     | Source IP in fragments                  |
+| -o npckts | Number of packets per burst (-1)        |
+| -q sec    | Seconds between keep-alives (-1)        |
+| -y prga   | Keystream for shared key authentication |
+| -B        | Bit rate test                           |
+| -D        | Disable AP detection                    |
+| -F        | Chooses first matching packet           |
+| -R        | Disables /dev/rtc usage                 |
+
+#### Aireplay-ng Injection Test
+
+Before we start sending deauthentication frames, we need to determine if our wireless card can successfully inject wireless frames into the target AP. The injection test measures ping response times to the AP. We can get a good indication of the link quality by looking at the percentage of responses received. In addition, if we have two wireless cards connected, the test can also help us determine which specific injection attacks will be successful.
+
+A basic injection test consists determining the list of APs that respond to a broadcast probe. For each of the APs found, Aireplay-ng also determines the quality of the connection by performing a 30-frame test. This helps in determining whether our card can successfully send and receive responses to the test target.
+
+**Basic Injection Test**
+The steps to execute a basic injection test is as follows:
+
+* Set the card to the desired channel of the target AP using *Airmon-ng* or *iw*
+```
+sudo airmon-ng start wlan0 3
+```
+
+* Execute Aireplay-ng with option -9 and the interface
+
+```
+sudo aireplay-ng -9 wlan0mon
+```
+
+We should pay attention to the percentage success rate for our target AP and make adjustments to our physical location if need be. It is also common for the injection to spill over into other channels as evidenced by Aireplay-ng reporting output for APs in another channel.
+
+**Injection Test for a Specific SSID**
+We can use the option *-e* to provide the ESSID and the *-a* option for the BSSID and perform test on this specific SSID.
+
+```
+sudo aireplay-ng -9 -e wifu -a 34:08:04:09:3D:38 wlan0mon
+```
+
+```
+└─$ sudo aireplay-ng -9 -e 'Vecingetorix_SOHO' -a 5C:E9:31:BE:DD:40 wlan0
+19:18:58  Waiting for beacon frame (BSSID: 5C:E9:31:BE:DD:40) on channel 3
+19:18:58  Trying broadcast probe requests...
+19:18:58  Injection is working!
+19:19:00  Found 1 AP 
+
+19:19:00  Trying directed probe requests...
+19:19:00  5C:E9:31:BE:DD:40 - channel: 3 - 'Vecingetorix_SOHO'
+19:19:01  Ping (min/avg/max): 2.559ms/15.392ms/107.197ms Power: -7.13
+19:19:01  30/30: 100%
+
+```
+
+
+Aireplay-ng automatically validates that the BSSID is correct. To disable this, we can use the option *-D*, Aireplay-ng will trust the BSSID provided in the commandline.
+
+**Card to Card (Attack) Injection test**
+
+The card-to-card injection test is a far more robust check. It will also test whether a card can implement various Aireplay-ng attacks. Transmitting a frame using Aireplay-ng or any other tool, doesn't guarrantee that it will actually be sent. Sometimes frames are modified by the card's firmware or driver before being sent. Doing a card-to-card injection test guarantees the frames will actually be sent correctly.
+
+```
+sudo aireplay-ng -9 -i wlan1mon wlan0mon
+```
+
+
+```
+kali@kali:~$ sudo aireplay-ng -9 -i wlan1mon wlan0mon
+
+12:50:57  Trying broadcast probe requests...
+12:50:57  Injection is working!
+12:50:59  Found 2 APs
+
+12:50:59  Trying directed probe requests...
+12:50:59  34:08:04:09:3D:38 - channel: 3 - 'wifu'
+12:51:00  Ping (min/avg/max): 1.735ms/4.619ms/12.689ms Power: -47.33
+12:51:00  27/30:  90%
+
+12:51:01  C8:BC:C8:FE:D9:65 - channel: 2 - 'secnet'
+12:51:01  Ping (min/avg/max): 2.943ms/17.900ms/49.663ms Power: -117.10
+12:51:01  29/30:  96%
+
+12:51:01  Trying card-to-card injection...
+12:51:01  Attack -0:           OK
+12:51:02  Attack -1 (open):    OK
+12:51:02  Attack -1 (psk):     OK
+12:51:02  Attack -2/-3/-4/-6:  OK
+12:51:02  Attack -5/-7:        OK
+```
+
+If we receive a "Fail" message for attack 5 (--fragment), the card may still work if the injection MAC address matches the current card MAC address. With some drivers, it will fail if they are not the same.
+
+#### Aireplay-ng Troubleshooting
+
+It is very important that we start monitor mode on the correct channel, otherwise we might get errors. Additionally, other tools that do channel hopping like Airodump-ng can change the channel of of the wireless card and cause problems. We want to be sure that we are also using the correct wireless card. 
+
+Also ensure that you kill any services/processes that may interfere with the working of airmon-ng.
+
+There are a few other things that we might look into when troubleshooting. 
+
+We can look for deauthentication or disassociation messages during injection. These might indicate that we are not associated with the AP. Aireplay-ng will typically indicate this, but we can also observe it by using tcpdump command below:
+
+```
+sudo tcpdump -n -e -s0 -vvv -i <interface name>
+```
+
+We can also ensure that the wireless driver is properly patched and installed.
+
+
+### Aircrack-ng
+
+Aircrack-ng can crack WEP and WPA/WPA2 networks that use pre-shared keys or PKMID.
+
+Aircrack-ng is considered an offline attack since it works with packet captures and doesn't require interaction with any Wi-Fi devic
+
+It is important that we perform benchmark to understand the performance capabilities of our cracking system.
+
+#### Aircrack-ng Benchmark
+
+We can use the below command to determine the cracking speed of our CPU resources. 
+
+```
+aircrack-ng -S
+```
+
+We get the output in k/s which is the number of passphrases per second.
+
+The option *-u* lists CPU information:
+
+```
+└─$ sudo aircrack-ng -u    
+Vendor          = Intel
+Model           = Intel(R) Core(TM) i7-8650U CPU @ 1.90GHz
+Features        = MMX,SSE,SSE2,SSE3,SSSE3,SSE4.1,SSE4.2,AES-NI,AVX,AVX2
+Hypervisor      = Yes (Virtualization detected)
+Hyper-Threading = No
+Logical CPUs    = 1
+Threads per core= 1
+CPU cores       = 1 (4 total, 4 sockets)
+SIMD size       = 8 (256 bit)
+SIMD size in use= 8 (256 bit)
+
+```
+
+
+
+### Airdecap-ng
+
+Airedecap-ng is useful when we have retrieved the key to a wireless network. We can use it to decrypt WEP, WPA PSK, or WPA2 PSK capture files. We'll use it to strip wireless headers from unencrypted wireless capture.
+
+```
+sudo airdecap-ng -b 34:08:04:09:3D:38 opennet-01.cap
+```
+
+#### Removing Wireless Headers
+
+
+
+
